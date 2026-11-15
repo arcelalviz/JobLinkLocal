@@ -1,64 +1,110 @@
 'use client';
+
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
-import { motion } from 'motion/react';
-import { ArrowUpRight, ArrowRight, BriefcaseBusiness, MapPin, Users, Compass, CornerDownRight, Building2, Route } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, ArrowUpRight, BriefcaseBusiness, Building2, Check, ChevronRight, CircleCheck, FileCheck2, MapPin, Menu, Search, ShieldCheck, UserRound, X } from 'lucide-react';
 import { request } from '@/lib/http';
 import type { Job } from '@/types';
 
-const OpportunityCanvas=dynamic(()=>import('@/visuals/OpportunityCanvas'),{ssr:false,loading:()=> <div className="canvas-fallback"><span className="orbit-loading"/></div>});
+const setup = [
+  { number: '01', title: 'Create your account', description: 'Build a detailed profile as a jobseeker or employer.' },
+  { number: '02', title: 'Complete verification', description: 'Submit the required credentials for LGU review.' },
+  { number: '03', title: 'Take the next step', description: 'Discover positions or recruit candidates with clarity.' }
+];
 
-const reveal={initial:{opacity:0,y:24},whileInView:{opacity:1,y:0},viewport:{once:true,amount:.2},transition:{duration:.6}};
+function formatSalary(job: Job) {
+  if (job.salary_min == null && job.salary_max == null) return 'Compensation discussed with employer';
+  const number = (value: number) => `₱${new Intl.NumberFormat('en-PH', { maximumFractionDigits: 0 }).format(value)}`;
+  if (job.salary_min != null && job.salary_max != null) return `${number(job.salary_min)}–${number(job.salary_max)} / month`;
+  return job.salary_min != null ? `From ${number(job.salary_min)} / month` : `Up to ${number(job.salary_max!)} / month`;
+}
 
-export function Landing(){
- const [jobs,setJobs]=useState<Job[]>([]);
- const [search,setSearch]=useState('');
- const [menu,setMenu]=useState(false);
- useEffect(()=>{request<Job[]>('jobs').then(setJobs).catch(()=>{});},[]);
- return <main id="top" className="landing">
-   <div className="hero-zone">
-     <nav className="site-nav wrap">
-       <Link className="brand" href="/" aria-label="JobLinkLocal home"><span className="brand-icon"><Route size={19} strokeWidth={2.6}/></span><span>joblink<span className="brand-soft">local</span></span></Link>
-       <div className={`nav-center ${menu?'nav-open':''}`}><a href="#opportunities" onClick={()=>setMenu(false)}>Explore jobs</a><a href="#how-it-works" onClick={()=>setMenu(false)}>How it works</a><a href="#communities" onClick={()=>setMenu(false)}>Our mission</a></div>
-       <div className="nav-actions"><Link className="nav-signin" href="/login?portal=jobseeker">Sign in</Link><Link className="btn btn-lime btn-small" href="/register">Join the network <ArrowUpRight size={16}/></Link></div>
-       <button className="mobile-toggle" onClick={()=>setMenu(v=>!v)} aria-label="Toggle menu">Menu</button>
-     </nav>
-     <section className="hero wrap">
-       <div className="hero-left">
-         <motion.div initial={{opacity:0,y:14}} animate={{opacity:1,y:0}} transition={{duration:.5}} className="hero-kicker"><span className="signal-dot"/> THE LOCAL CAREERS EXCHANGE <span className="hero-kicker-number">01 / 04</span></motion.div>
-         <motion.h1 initial={{opacity:0,y:34}} animate={{opacity:1,y:0}} transition={{duration:.75,delay:.08}}>
-           Find your<br/><span className="outline-word">place.</span><br/><em>Build what’s next.</em>
-         </motion.h1>
-         <motion.p className="hero-description" initial={{opacity:0,y:24}} animate={{opacity:1,y:0}} transition={{duration:.6,delay:.25}}>Meaningful work starts with a connection. Discover verified opportunities, meet local employers, and move forward with confidence.</motion.p>
-         <motion.div className="hero-cta-row" initial={{opacity:0,y:18}} animate={{opacity:1,y:0}} transition={{duration:.5,delay:.35}}>
-           <Link href="/register?role=jobseeker" className="btn btn-lime btn-large">Find your next role <ArrowUpRight size={18}/></Link>
-           <Link href="/register?role=employer" className="hero-secondary">I'm hiring <ArrowRight size={17}/></Link>
-         </motion.div>
-         <div className="hero-bottom"><span className="tiny-grid"/> BUILT FOR REAL PEOPLE. BUILT FOR HERE.</div>
-       </div>
-       <div className="hero-art"><div className="orbital-grid"/><OpportunityCanvas/><div className="hero-art-sticker sticker-one"><span className="sticker-icon"><BriefcaseBusiness size={20}/></span><div><strong>New possibilities</strong><small>Made for local talent</small></div></div><div className="hero-art-sticker sticker-two"><span className="map-dot"/> EVERY CONNECTION COUNTS <ArrowUpRight size={13}/></div><span className="hero-art-caption">LOCAL CONNECTIONS / AN INTERACTIVE ATLAS</span><span className="shape-index">FIG. 001</span></div>
-     </section>
-     <div className="hero-tape"><div className="tape-inner"><span>BETTER CONNECTIONS</span><span className="tape-divider" aria-hidden="true"/><span>BRIGHTER FUTURES</span><span className="tape-divider" aria-hidden="true"/><span>GOOD WORK, CLOSE TO HOME</span><span className="tape-divider" aria-hidden="true"/><span>BETTER CONNECTIONS</span><span className="tape-divider" aria-hidden="true"/></div></div>
-   </div>
-   <section className="discover-section wrap" id="opportunities">
-     <motion.div {...reveal} className="section-heading"><div><p className="eyebrow dark-eyebrow">02 / THE OPPORTUNITY BOARD</p><h2>Work worth <em>finding.</em></h2></div><p>A curated place for local roles. No endless noise. Just genuine opportunities and a clearer path forward.</p></motion.div>
-     <div className="search-rail"><Compass size={22}/><input aria-label="Find jobs" value={search} onChange={e=>setSearch(e.target.value)} placeholder="What kind of work are you looking for?"/><Link href={`/register?role=jobseeker`} className="search-rail-button">Start exploring <ArrowUpRight size={18}/></Link></div>
-     <div className="opportunity-grid">
-       {jobs.filter(j=>(`${j.title} ${j.company_name} ${j.category}`).toLowerCase().includes(search.toLowerCase())).slice(0,3).map((job,i)=><motion.article {...reveal} className="opportunity-card" key={job.id}>
-         <div className="op-top"><span className="op-no">0{i+1}</span><span className="pill pill-quiet">{job.work_setup}</span></div>
-         <div className="op-company"><span className="company-mark"><Building2 size={21}/></span>{job.company_name}</div>
-         <h3>{job.title}</h3><p><MapPin size={14}/>{job.location}</p><div className="op-bottom"><span>{job.employment_type}</span><Link href={`/login?next=app`} aria-label={`Learn about ${job.title}`}><ArrowUpRight size={21}/></Link></div>
-       </motion.article>)}
-       {jobs.length===0&&[0,1,2].map((v)=><motion.article {...reveal} className="opportunity-card opportunity-placeholder" key={v}><div className="op-top"><span className="op-no">0{v+1}</span><span className="pill pill-quiet">Your next move</span></div><div className="placeholder-symbol"><MapPin size={34} strokeWidth={1.5}/></div><h3>{['Your next role starts locally.','Something good is taking shape.','Your neighborhood. Your future.'][v]}</h3><div className="op-bottom"><span>Opportunities coming soon</span><ArrowUpRight size={21}/></div></motion.article>)}
-     </div>
-     <div className="section-foot"><span>{jobs.length?`${jobs.length} open opportunities`:'Your opportunity board starts with you.'}</span><Link href="/register">Create an account <ArrowUpRight size={16}/></Link></div>
-   </section>
-   <section className="feature-stage" id="how-it-works"><div className="wrap feature-stage-grid">
-     <motion.div {...reveal} className="feature-art"><div className="feature-art-top"><span>CONNECTIONS, REIMAGINED</span><MapPin size={24}/></div><div className="feature-circle"><div className="feature-circle-inside"><BriefcaseBusiness size={54} strokeWidth={1.25}/></div><div className="orbit-dot orbit-dot-a"/><div className="orbit-dot orbit-dot-b"/></div><div className="feature-art-bottom"><span>REAL PEOPLE <CornerDownRight size={20}/></span><span>REAL POSSIBILITIES</span></div></motion.div>
-     <div className="feature-copy"><p className="eyebrow">03 / HOW IT WORKS</p><h2>Less friction.<br/><em>More future.</em></h2><p>We’ve rebuilt the path from discovering an opportunity to getting hired. Human-first from beginning to end.</p><div className="feature-steps"><div><span>01</span><div><h4>Create your profile</h4><p>Show more than your name. Let your potential speak.</p></div></div><div><span>02</span><div><h4>Get verified</h4><p>Local government verification builds a safer community.</p></div></div><div><span>03</span><div><h4>Make your move</h4><p>Apply, connect, and follow every update in one place.</p></div></div></div></div>
-   </div></section>
-   <section className="community-section wrap" id="communities"><motion.div {...reveal} className="community-intro"><p className="eyebrow dark-eyebrow">04 / BUILT FOR EVERY SIDE OF THE TABLE</p><h2>Different journeys.<br/><em>One common ground.</em></h2></motion.div><div className="community-cards"><Link href="/register?role=jobseeker" className="community-card seeker-card"><div className="community-top"><Users size={26}/><ArrowUpRight size={22}/></div><span>FOR PEOPLE WITH POTENTIAL</span><h3>Find your<br/>next thing.</h3><p>Put your skills on the map. Discover work. Build momentum.</p><div className="community-figure">01</div></Link><Link href="/register?role=employer" className="community-card employer-card"><div className="community-top"><BriefcaseBusiness size={26}/><ArrowUpRight size={22}/></div><span>FOR TEAMS WITH AMBITION</span><h3>Build with<br/>the best.</h3><p>Meet verified local talent and move hiring forward with clarity.</p><div className="community-figure">02</div></Link></div></section>
-   <footer className="site-footer"><div className="wrap"><div className="footer-top"><div><div className="brand footer-brand"><span className="brand-icon"><Route size={19}/></span><span>joblinklocal</span></div><h2>Great things<br/><em>start close.</em></h2></div><Link href="/register" className="footer-button">Make your next move <ArrowUpRight size={23}/></Link></div><div className="footer-bottom"><span>© {new Date().getFullYear()} JOBLINKLOCAL</span><span>MADE FOR OUR COMMUNITIES, NOT JUST THE ALGORITHM.</span><a href="#top">BACK TO TOP ↑</a></div></div></footer>
- </main>;
+export function Landing() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [search, setSearch] = useState('');
+  const [menu, setMenu] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    request<Job[]>('jobs')
+      .then(data => { if (active) setJobs(Array.isArray(data) ? data : []); })
+      .catch(() => { if (active) setLoadError(true); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  const visibleJobs = useMemo(() => jobs.filter(job =>
+    `${job.title} ${job.company_name} ${job.category} ${job.location}`.toLowerCase().includes(search.trim().toLowerCase())
+  ), [jobs, search]);
+
+  return <main className="professional-site" id="top">
+    <a className="pro-skip" href="#opportunities">Skip to job opportunities</a>
+    <div className="pro-utility-bar"><div className="pro-container"><span>JOBLINKLOCAL <span className="pro-utility-separator">/</span> LOCAL EMPLOYMENT PLATFORM</span><span className="pro-utility-right"><ShieldCheck size={14} /> Account and job verification through LGU review</span></div></div>
+    <header className="pro-header">
+      <div className="pro-container pro-header-inner">
+        <Link href="/" className="pro-logo" aria-label="JobLinkLocal home"><span className="pro-logo-symbol"><BriefcaseBusiness size={19}/></span><span>joblink<strong>local</strong></span></Link>
+        <nav className={`pro-nav ${menu ? 'is-open' : ''}`} aria-label="Main navigation">
+          <a href="#opportunities" onClick={() => setMenu(false)}>Explore jobs</a>
+          <a href="#how-it-works" onClick={() => setMenu(false)}>How it works</a>
+          <a href="#employers" onClick={() => setMenu(false)}>For employers</a>
+        </nav>
+        <div className="pro-header-actions"><Link href="/login" className="pro-link">Sign in</Link><Link href="/register" className="pro-button pro-button-primary pro-header-cta">Create account <ArrowUpRight size={16}/></Link></div>
+        <button type="button" className="pro-menu-button" aria-label={menu ? 'Close navigation' : 'Open navigation'} aria-expanded={menu} onClick={() => setMenu(v => !v)}>{menu ? <X size={22}/> : <Menu size={22}/>}</button>
+      </div>
+    </header>
+
+    <section className="pro-hero" aria-labelledby="hero-title">
+      <div className="pro-container pro-hero-grid">
+        <div className="pro-hero-copy"><div className="pro-tag"><span className="pro-tag-line"/> BETTER LOCAL HIRING</div>
+          <h1 id="hero-title">The right opportunity.<br/><span>Closer than you think.</span></h1>
+          <p>Find meaningful work in your community. Connect with local employers, track every application, and move forward through one trusted platform.</p>
+          <div className="pro-hero-actions"><Link className="pro-button pro-button-primary pro-button-large" href="#opportunities">Explore opportunities <ArrowRight size={18}/></Link><Link className="pro-text-link" href="/register?role=employer">I'm looking to hire <ArrowUpRight size={17}/></Link></div>
+          <div className="pro-trust-line"><span><CircleCheck size={17}/> Clear application updates</span><span><FileCheck2 size={17}/> LGU review process</span></div>
+        </div>
+        <div className="pro-hero-panel" aria-label="Latest employment opportunities preview">
+          <div className="pro-panel-head"><div><span className="pro-overline">JOBLINKLOCAL / OPPORTUNITIES</span><h2>Latest openings</h2></div><span className="pro-panel-status"><span/> Live listings</span></div>
+          <div className="pro-panel-body">
+            {loading ? <div className="pro-panel-message">Loading available positions…</div> : loadError ? <div className="pro-panel-message">Open positions could not be loaded right now.</div> : jobs.length === 0 ? <div className="pro-panel-message">No published positions yet. Explore JobLinkLocal as new opportunities arrive.</div> : jobs.slice(0, 3).map(job => <div className="pro-preview-job" key={job.id}>
+              <span className="pro-preview-company"><Building2 size={18}/></span>
+              <div><strong>{job.title}</strong><span>{job.company_name} · {job.location}</span></div>
+              <ChevronRight size={18} className="pro-preview-arrow"/>
+            </div>)}
+          </div>
+          <div className="pro-panel-footer"><span>{!loading && !loadError ? `${jobs.length} published ${jobs.length === 1 ? 'position' : 'positions'}` : 'Current listings'}</span><a href="#opportunities">Browse roles <ArrowUpRight size={16}/></a></div>
+        </div>
+      </div>
+    </section>
+
+    <section className="pro-value-strip"><div className="pro-container"><div><ShieldCheck size={20}/><span><strong>Account verification</strong><small>LGU credential review</small></span></div><div><BriefcaseBusiness size={20}/><span><strong>Recruitment management</strong><small>From application to hiring</small></span></div><div><FileCheck2 size={20}/><span><strong>Clear records</strong><small>Track status and decisions</small></span></div></div></section>
+
+    <section className="pro-section pro-opportunities" id="opportunities">
+      <div className="pro-container">
+        <div className="pro-section-heading"><div><span className="pro-overline">DISCOVER OPPORTUNITIES</span><h2>Explore available positions.</h2></div><p>Local opportunities, organized to help you find work that matches your experience and goals.</p></div>
+        <label className="pro-search"><Search size={20}/><span className="sr-only">Search available jobs</span><input aria-label="Search jobs by title, employer or location" placeholder="Search by job title, employer, or location" value={search} onChange={event => setSearch(event.target.value)}/><span className="pro-search-result">{loading ? 'Loading' : `${visibleJobs.length} ${visibleJobs.length===1?'result':'results'}`}</span></label>
+        <div className="pro-job-grid">
+          {loading ? <div className="pro-no-jobs">Loading current openings…</div> : loadError ? <div className="pro-no-jobs">We couldn't load job listings. Please try again later.</div> : visibleJobs.length === 0 ? <div className="pro-no-jobs">{search ? 'No openings match that search. Try another keyword.' : 'There are no published openings at the moment.'}</div> : visibleJobs.slice(0, 6).map(job => <article className="pro-job-card" key={job.id}>
+            <div className="pro-job-card-top"><span className="pro-job-category">{job.category || 'Opportunity'}</span><span className="pro-job-work">{job.work_setup}</span></div>
+            <div className="pro-job-company"><Building2 size={17}/>{job.company_name}</div><h3>{job.title}</h3>
+            <p className="pro-job-location"><MapPin size={16}/>{job.location}</p>
+            <div className="pro-job-footer"><div><strong>{formatSalary(job)}</strong><span>{job.employment_type}</span></div><Link href="/login?portal=jobseeker" className="pro-job-action" aria-label={`Sign in to apply for ${job.title}`}><ArrowUpRight size={19}/></Link></div>
+          </article>)}
+        </div>
+        <div className="pro-section-bottom"><span>All applications are managed through your personal workspace.</span><Link href="/register?role=jobseeker" className="pro-inline-link">Create a jobseeker account <ArrowRight size={17}/></Link></div>
+      </div>
+    </section>
+
+    <section className="pro-section pro-process" id="how-it-works"><div className="pro-container">
+      <div className="pro-process-heading"><div><span className="pro-overline">SIMPLE BY DESIGN</span><h2>A clearer path to opportunity.</h2></div><p>JobLinkLocal brings every important step together, from setting up an account to making informed hiring decisions.</p></div>
+      <div className="pro-process-grid">{setup.map(item => <div className="pro-process-step" key={item.number}><span className="pro-step-number">{item.number}</span><h3>{item.title}</h3><p>{item.description}</p></div>)}</div>
+    </div></section>
+
+    <section className="pro-section pro-employer" id="employers"><div className="pro-container pro-employer-inner">
+      <div><span className="pro-overline">FOR LOCAL EMPLOYERS</span><h2>Build the team behind your next milestone.</h2><p>Publish detailed roles, review applicants, record decisions, and keep candidates informed—all in one recruitment workspace.</p><Link href="/register?role=employer" className="pro-button pro-button-white">Create an employer account <ArrowUpRight size={18}/></Link></div>
+      <div className="pro-employer-checklist" aria-label="Employer platform capabilities"><div><Check size={19}/> Job postings with clear requirements</div><div><Check size={19}/> Organized candidate pipeline</div><div><Check size={19}/> Professional application notifications</div><div><Check size={19}/> Recorded hiring and employment updates</div></div>
+    </div></section>
+
+    <footer className="pro-footer"><div className="pro-container"><div className="pro-footer-main"><Link href="/" className="pro-logo"><span className="pro-logo-symbol"><BriefcaseBusiness size={18}/></span><span>joblink<strong>local</strong></span></Link><p>Better connections for local talent and businesses.</p><div><Link href="/login">Sign in</Link><Link href="/register">Create account</Link><a href="#top">Back to top</a></div></div><div className="pro-footer-bottom"><span>© {new Date().getFullYear()} JobLinkLocal</span><span>Local opportunity, professionally connected.</span></div></div></footer>
+  </main>;
 }
