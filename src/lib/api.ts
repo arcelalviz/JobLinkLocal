@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { adminClient } from '@/lib/supabase/admin';
 import { userClient } from '@/lib/supabase/server';
 import { ApiError, currentUser, requireSameOrigin, checkLimit, readJson, dbError, recordAudit, notify, ok } from '@/lib/guards';
-import { sendSystemEmail, emailPerson } from '@/lib/mail';
+import { sendSystemEmail, emailPerson, applicationDecisionNotice, employmentStatusNotice } from '@/lib/mail';
 import { uploadPrivate } from '@/lib/uploads';
 import { signUpSchema, jobSchema, applicationSchema, decisionSchema, validated } from '@/lib/validators';
 import { reportData, csvReport, pdfReport } from '@/lib/report';
@@ -406,8 +406,11 @@ export async function api(req:NextRequest,parts:string[]) {
    const body=parse(decisionSchema,await readJson(req));
    const {data,error}=await db().rpc('record_application_decision',{p_actor:user.id,p_application:body.id,p_decision:body.decision,p_note:body.note||'',p_start_date:body.start_date||null});
    dbError(error,'Unable to update application.');
-   if(data?.seeker_id) await emailPerson(data.seeker_id,body.decision==='hired'?'You have been hired — JobLinkLocal':'Your JobLinkLocal application has an update',`${data.job_title}: ${body.decision}. ${body.note||''}`,'application_decision');
-   return ok({message:'Applicant updated and notified.',result:data});
+   if(data?.seeker_id) {
+     const notice=applicationDecisionNotice(body.decision,data.job_title||'the position',body.note||'');
+     await emailPerson(data.seeker_id,notice.subject,notice.body,'application_decision');
+   }
+   return ok({message:'Application status saved and in-app notification recorded.',result:data});
  }
 
  if(routeIs(parts,'employer','end')&&method==='POST') {
@@ -420,8 +423,11 @@ export async function api(req:NextRequest,parts:string[]) {
    if(!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) fail('Enter a valid end date.');
    const {data,error}=await db().rpc('end_employment',{p_actor:user.id,p_employment:id,p_ended_on:endDate,p_note:note});
    dbError(error,'Unable to update employment status.');
-   if(data?.seeker_id) await emailPerson(data.seeker_id,'Employment status updated — JobLinkLocal',`${data.job_title}: ${note}`,'employment_end');
-   return ok({message:'Employment ending recorded and applicant notified.',result:data});
+   if(data?.seeker_id) {
+     const notice=employmentStatusNotice(data.job_title||'the position',endDate,note);
+     await emailPerson(data.seeker_id,notice.subject,notice.body,'employment_end');
+   }
+   return ok({message:'Employment separation saved and in-app notification recorded.',result:data});
  }
 
  if(routeIs(parts,'lgu')&&method==='GET') {

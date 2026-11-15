@@ -38,3 +38,52 @@ export async function emailPerson(userId:string, title:string, text:string, kind
   const { data } = await adminClient().from('profiles').select('email').eq('id',userId).maybeSingle();
   if (data?.email) await sendSystemEmail(data.email,title,`${text}\n\nView updates in your JobLinkLocal dashboard.`,kind);
 }
+
+export function applicationDecisionNotice(status:string, title:string, note:string) {
+  const outcomes:Record<string,{subject:string;message:string}>={
+    reviewing:{subject:'Application under review',message:'The employer has started reviewing your application.'},
+    shortlisted:{subject:'Application shortlisted',message:'The employer has shortlisted your application for further consideration.'},
+    interviewing:{subject:'Interview stage update',message:'Your application has moved to the interview stage. Please check with the employer for scheduling details.'},
+    accepted:{subject:'Application accepted',message:'The employer has accepted your application. This status does not confirm that employment has started; the employer will record a separate hiring update.'},
+    rejected:{subject:'Application outcome: Not selected',message:'Thank you for your interest in this opportunity. The employer has decided not to proceed with your application at this time.'},
+    hired:{subject:'Hiring confirmation',message:'The employer has recorded your hiring for this position. Please confirm your employment terms and start arrangements directly with the employer.'}
+  };
+  const outcome=outcomes[status]||{subject:'Application status update',message:'The employer has updated your application status.'};
+  const noteText=note.trim()?`
+
+Message from the employer:
+${note.trim()}`:'';
+  return {
+    subject:`${outcome.subject} — ${title} | JobLinkLocal`,
+    body:`Dear JobLinkLocal Applicant,
+
+We are writing regarding your application for ${title}.
+
+${outcome.message}${noteText}
+
+You may review your current status and the employer's note in the JobLinkLocal application dashboard.
+
+Sincerely,
+JobLinkLocal Notifications
+
+This is an automated platform update.`
+  };
+}
+
+export function employmentStatusNotice(title:string, endDate:string, note:string) {
+  const noteText=note.trim();
+  return {
+    subject:`Employment status notice — ${title} | JobLinkLocal`,
+    body:`Dear JobLinkLocal Member,
+
+This is to inform you that your employer has recorded the end of your employment in the ${title} position, effective ${endDate}.
+
+Reason or explanation provided by the employer:
+${noteText}
+
+You can view this update in your JobLinkLocal application and employment records. This platform notification does not replace any formal notice or process required by applicable employment law or your employment agreement. If you have questions about this record, please contact your employer directly.
+
+Sincerely,
+JobLinkLocal Notifications`
+  };
+}
