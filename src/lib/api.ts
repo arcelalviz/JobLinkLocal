@@ -290,21 +290,40 @@ export async function api(req:NextRequest,parts:string[]) {
 
  if(routeIs(parts,'files','resume')&&method==='GET') {
    const {user,profile}=await currentUser();
-   const path=str(q('path'));
-   if(!path||!/^[-a-f0-9]{36}\/[-a-f0-9]{36}\.pdf$/i.test(path)) fail('Invalid resume reference.');
-   const owner=path.split('/')[0];
-   let allowed=owner===user.id;
-   if(!allowed&&profile.role==='employer'&&profile.lgu_status==='approved') {
-     const {data:apps}=await db().from('applications').select('job_id').eq('seeker_id',owner).eq('resume_path',path);
-     if(apps?.length){
-       const {count}=await db().from('jobs').select('id',{count:'exact',head:true}).eq('employer_id',user.id).in('id',apps.map((x:any)=>x.job_id));
-       allowed=!!count;
+   const applicationId=str(q('application'));
+   let path:string;
+   if(applicationId) {
+     idOrFail(applicationId);
+     const {data:application,error:applicationError}=await db().from('applications').select('id,seeker_id,job_id,resume_path').eq('id',applicationId).maybeSingle();
+     dbError(applicationError,'Could not load the application.');
+     if(!application||!application.resume_path) fail('No resume was attached to this application.',404);
+     if(application.seeker_id!==user.id) {
+       if(profile.role!=='employer'||profile.lgu_status!=='approved') fail('Not authorized.',403);
+       const {data:job,error:jobError}=await db().from('jobs').select('id').eq('id',application.job_id).eq('employer_id',user.id).maybeSingle();
+       dbError(jobError,'Could not verify the employer.');
+       if(!job) fail('Not authorized.',403);
      }
+     path=application.resume_path;
+   } else {
+     const requestedPath=str(q('path'));
+     if(!/^[-a-f0-9]{36}\/(?:[-a-f0-9]{36}|joblinklocal-demo\/sample-resume)\.pdf$/i.test(requestedPath)) fail('Invalid resume reference.');
+     const owner=requestedPath.split('/')[0];
+     let allowed=owner===user.id;
+     if(!allowed&&profile.role==='employer'&&profile.lgu_status==='approved') {
+       const {data:apps,error:appsError}=await db().from('applications').select('job_id').eq('seeker_id',owner).eq('resume_path',requestedPath);
+       dbError(appsError,'Could not verify the application.');
+       if(apps?.length){
+         const {count,error:jobsError}=await db().from('jobs').select('id',{count:'exact',head:true}).eq('employer_id',user.id).in('id',apps.map((x:any)=>x.job_id));
+         dbError(jobsError,'Could not verify the employer.');
+         allowed=!!count;
+       }
+     }
+     if(!allowed) fail('Not authorized.',403);
+     path=requestedPath;
    }
-   if(!allowed) fail('Not authorized.',403);
    const {data,error}=await db().storage.from('resumes').download(path);
-   if(error||!data) fail('Resume unavailable.',404);
-   return new NextResponse(await data.arrayBuffer(),{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="resume.pdf"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+   if(error||!data) fail('The attached resume is unavailable. Ask the candidate to check their uploaded file.',404);
+   return new NextResponse(await data.arrayBuffer(),{headers:{'Content-Type':'application/pdf','Content-Disposition':'inline; filename="resume.pdf"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
  }
 
  if(routeIs(parts,'saved')&&method==='GET') {
