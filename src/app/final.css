@@ -26,7 +26,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .pill-quiet{background:#e7ebed;color:#49636a}
 .brand{font-family:var(--sans);font-weight:700;letter-spacing:-.067em}
 .brand-icon{background:var(--orange)!important;color:#fff!important;border-radius:7px;transform:none}
-.brand sup{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:.05em;margin-left:-4px;color:#f7ac8f}
+
 .eyebrow{color:#e6a17f}
 .dark-eyebrow{color:#3f7881!important}
 .signal-dot{background:#e5a085;box-shadow:0 0 0 4px rgba(229,160,133,.12)}
@@ -291,3 +291,5 @@ select{color-scheme:light}
 .trend-chart polyline{stroke:#27586b}
 .trend-chart polyline:nth-of-type(2){stroke:#dd8665}
 .trend-chart circle{fill:#e9a27e;stroke:#27586b}
+
+.verification-help{display:grid;gap:10px;margin:4px 0 22px;padding:18px 20px;border:1px solid #b9d1cb;border-radius:12px;background:#eef5f2;color:#21483f}.verification-help-heading{display:flex;align-items:center;gap:10px;font-size:13px}.verification-help-heading svg{color:#2a7565}.verification-help p{font-size:12px;line-height:1.65;color:#4e665f;margin:0}.verification-help-action{display:inline-flex;align-items:center;justify-content:space-between;gap:9px;width:fit-content;border:0;border-radius:8px;padding:10px 14px;background:#1d483b;color:#fff;font-size:12px;font-weight:700;cursor:pointer}.verification-help-action:hover{background:#28614f}.verification-help-action:focus-visible{outline:3px solid #70aa99;outline-offset:3px}.verification-help-action:disabled{opacity:.55;cursor:wait}

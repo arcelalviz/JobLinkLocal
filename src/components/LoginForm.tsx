@@ -19,9 +19,22 @@ export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker'}:
  const [password,setPassword]=useState('');
  const [visible,setVisible]=useState(false);
  const [busy,setBusy]=useState(false);
+ const [resending,setResending]=useState(false);
+ const [verificationNeeded,setVerificationNeeded]=useState(invalidConfirmation);
  const [portal,setPortal]=useState<Portal>(initialPortal);
  const router=useRouter();
  const toast=useToast();
+ const resendVerification=async()=>{
+  if(!email.trim()){toast.show('Enter your account email address first.','warning');return;}
+  if(resending)return;
+  setResending(true);
+  try{
+   await request('auth/resend','POST',{email:email.trim()});
+   toast.show('Verification email requested.','success','If your account needs confirmation, check your inbox and spam folder.');
+   setVerificationNeeded(false);
+  }catch(error){toast.show(error instanceof Error?error.message:'Unable to request a verification email.','error');}
+  finally{setResending(false);}
+ };
  const submit=async(event:React.FormEvent)=>{
   event.preventDefault();
   if(!email.trim()||!password){toast.show('Enter your email and password.','warning');return;}
@@ -31,7 +44,11 @@ export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker'}:
    toast.show('You are signed in.','success',portal==='admin'?'Proceed to your secure administration workspace.':'Your workspace is ready.');
    router.replace('/app');
    router.refresh();
-  }catch(error){toast.show(error instanceof Error?error.message:'Sign in failed.','error');}
+  }catch(error){
+   const message=error instanceof Error?error.message:'Sign in failed.';
+   if(/email confirmation required/i.test(message)) setVerificationNeeded(true);
+   toast.show(message,'error');
+  }
   finally{setBusy(false);}
  };
  return <AuthLayout eyebrow="SIGN IN / YOUR WORKSPACE" title="Welcome back." subtitle="Choose where you work, then securely access your account.">
@@ -46,7 +63,11 @@ export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker'}:
    })}
   </div>
   <p className="auth-role-help">Your selection is verified against your account. {portal==='admin'?'Administrators will complete an additional security check.':'Your registered role must match this sign-in area.'}</p>
-  {invalidConfirmation&&<div className="form-notice">The confirmation link could not be verified. Request another email below.</div>}
+  {verificationNeeded&&portal!=='admin'&&<div className="verification-help" role="status">
+   <div className="verification-help-heading"><Mail size={18}/><strong>Email verification required</strong></div>
+   <p>{invalidConfirmation?'Your confirmation link could not be verified. You can request a fresh link below.':'Confirm your email address before signing in. Check your inbox for the verification link.'}</p>
+   <button type="button" className="verification-help-action" disabled={resending} onClick={resendVerification}>{resending?'Requesting…':'Resend verification email'} <ArrowRight size={16}/></button>
+  </div>}
   <form noValidate onSubmit={submit} className="form-stack">
    <label className="form-field"><span>Email address</span><input type="email" required autoComplete="email" placeholder="you@example.com" value={email} onChange={event=>setEmail(event.target.value)}/></label>
    <label className="form-field"><span>Password</span><div className="input-wrap"><input type={visible?'text':'password'} minLength={8} autoComplete="current-password" required placeholder="Enter your password" value={password} onChange={event=>setPassword(event.target.value)}/><button type="button" className="eye-button" onClick={()=>setVisible(!visible)} aria-label={visible?'Hide password':'Show password'}>{visible?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></label>
@@ -54,6 +75,5 @@ export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker'}:
    <button disabled={busy} className="btn btn-ink btn-form" type="submit">{busy?'Signing in…':`Continue as ${portal==='admin'?'administrator':portal}`} <ArrowRight size={19}/></button>
   </form>
   {portal==='admin'?<div className="auth-alt">Need an administrator account? Contact the existing System Admin.</div>:<div className="auth-alt">New to JobLinkLocal? <Link href={`/register?role=${portal}`}>Create a {portal==='employer'?'business':'jobseeker'} account <ArrowRight size={16}/></Link></div>}
-  <div className="auth-resend"><Mail size={16}/> Didn't receive your confirmation? <button type="button" onClick={async()=>{if(!email){toast.show('Enter your email first.','warning');return;}try{await request('auth/resend','POST',{email});toast.show('Confirmation email requested.','success');}catch(error){toast.show(error instanceof Error?error.message:'Unable to resend.','error');}}}>Resend email</button></div>
  </AuthLayout>;
 }

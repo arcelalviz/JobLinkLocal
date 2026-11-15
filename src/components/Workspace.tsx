@@ -98,7 +98,7 @@ export function Workspace(){
  return <div className={`workspace role-${me.role}`}>
   {menu&&<div className="mobile-menu-shade" onClick={()=>setMenu(false)}/>}
   <aside className={`workspace-sidebar ${menu?'is-open':''}`}>
-   <div className="side-logo"><Link href="/" className="brand"><span className="brand-icon"><Route size={18}/></span><span>joblink<span className="brand-soft">local</span><sup>FINAL</sup></span></Link><button className="mobile-side-close" onClick={()=>setMenu(false)}><X size={20}/></button></div>
+   <div className="side-logo"><Link href="/" className="brand"><span className="brand-icon"><Route size={18}/></span><span>joblink<span className="brand-soft">local</span></span></Link><button className="mobile-side-close" onClick={()=>setMenu(false)}><X size={20}/></button></div>
    <div className="side-identity"><span className="workspace-bullet"/> <span>WORKSPACE / {roleNames[me.role].toUpperCase()}</span></div>
    <nav className="side-navigation" aria-label="Workspace navigation">
     <div className="side-group-label">YOUR WORKSPACE</div>

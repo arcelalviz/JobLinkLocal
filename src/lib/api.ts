@@ -55,7 +55,11 @@ export async function api(req:NextRequest,parts:string[]) {
    if(!email.success||typeof body.password!=='string') fail('Enter a valid email and password.');
    const client=await userClient();
    const {data,error}=await client.auth.signInWithPassword({email:email.data,password:body.password});
-   if(error||!data.user) fail('Invalid credentials or unconfirmed email.',401);
+   if(error){
+     if(error.code==='email_not_confirmed'||/email not confirmed/i.test(error.message)) fail('Email confirmation required. Check your inbox to verify your email address.',403);
+     fail('Invalid email or password.',401);
+   }
+   if(!data.user) fail('Invalid email or password.',401);
    const {data:profile}=await db().from('profiles').select('role,lgu_status,full_name').eq('id',data.user.id).maybeSingle();
    if(!profile || profile.lgu_status==='suspended'){
       await client.auth.signOut();
@@ -136,7 +140,11 @@ export async function api(req:NextRequest,parts:string[]) {
    const body=await readJson(req);
    if(!z.email().safeParse(body.email).success) fail('Enter a valid email address.');
    const client=await userClient();
-   await client.auth.resend({type:'signup',email:body.email,options:{emailRedirectTo:`${process.env.NEXT_PUBLIC_SITE_URL||url.origin}/auth/confirm`}});
+   const {error}=await client.auth.resend({type:'signup',email:body.email,options:{emailRedirectTo:`${process.env.NEXT_PUBLIC_SITE_URL||url.origin}/auth/confirm`}});
+   if(error){
+     if(error.status===429||/rate limit|too many/i.test(error.message)) fail('Too many verification email requests. Please try again later.',429);
+     fail('Verification email is temporarily unavailable. Please try again later.',503);
+   }
    return ok({message:'If verification is pending, a new email has been requested.'});
  }
 

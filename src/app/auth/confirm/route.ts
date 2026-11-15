@@ -21,6 +21,6 @@ export async function GET(request:NextRequest) {
   } else {
     error=new Error('Confirmation link is incomplete.');
   }
-  if(error)return NextResponse.redirect(new URL('/login?error=confirmation',url.origin));
+  if(error)return NextResponse.redirect(new URL(type==='recovery'?'/forgot?error=expired':'/login?error=confirmation',url.origin));
   return NextResponse.redirect(new URL(next==='/auth/reset'?'/auth/reset':'/app',url.origin));
 }
