@@ -61,6 +61,20 @@ export async function api(req:NextRequest,parts:string[]) {
       await client.auth.signOut();
       fail('This account cannot sign in. Contact support.',403);
    }
+   const requestedPortal=body.portal;
+   if(requestedPortal!==undefined){
+      if(!['jobseeker','employer','admin'].includes(requestedPortal)){
+        await client.auth.signOut();
+        fail('Choose a valid sign-in area.');
+      }
+      const allowed=requestedPortal==='admin'
+        ? ['lgu_admin','sys_admin'].includes(profile.role)
+        : requestedPortal===profile.role;
+      if(!allowed){
+        await client.auth.signOut();
+        fail('This account belongs to a different sign-in area. Select the correct account type.',403);
+      }
+   }
    return ok({role:profile.role,full_name:profile.full_name});
  }
 
@@ -406,11 +420,8 @@ export async function api(req:NextRequest,parts:string[]) {
    const body=parse(decisionSchema,await readJson(req));
    const {data,error}=await db().rpc('record_application_decision',{p_actor:user.id,p_application:body.id,p_decision:body.decision,p_note:body.note||'',p_start_date:body.start_date||null});
    dbError(error,'Unable to update application.');
-   if(data?.seeker_id) {
-     const notice=applicationDecisionNotice(body.decision,data.job_title||'the position',body.note||'');
-     await emailPerson(data.seeker_id,notice.subject,notice.body,'application_decision');
-   }
-   return ok({message:'Application status saved and in-app notification recorded.',result:data});
+   if(data?.seeker_id) { const notice=applicationDecisionNotice(body.decision,data.job_title||'the position',body.note||''); await emailPerson(data.seeker_id,notice.subject,notice.body,'application_decision'); }
+   return ok({message:'Application status saved and notification recorded.',result:data});
  }
 
  if(routeIs(parts,'employer','end')&&method==='POST') {
@@ -423,11 +434,8 @@ export async function api(req:NextRequest,parts:string[]) {
    if(!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) fail('Enter a valid end date.');
    const {data,error}=await db().rpc('end_employment',{p_actor:user.id,p_employment:id,p_ended_on:endDate,p_note:note});
    dbError(error,'Unable to update employment status.');
-   if(data?.seeker_id) {
-     const notice=employmentStatusNotice(data.job_title||'the position',endDate,note);
-     await emailPerson(data.seeker_id,notice.subject,notice.body,'employment_end');
-   }
-   return ok({message:'Employment separation saved and in-app notification recorded.',result:data});
+   if(data?.seeker_id) { const notice=employmentStatusNotice(data.job_title||'the position',endDate,note); await emailPerson(data.seeker_id,notice.subject,notice.body,'employment_end'); }
+   return ok({message:'Employment separation saved and notification recorded.',result:data});
  }
 
  if(routeIs(parts,'lgu')&&method==='GET') {
