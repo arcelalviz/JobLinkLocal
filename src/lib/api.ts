@@ -49,8 +49,9 @@ export async function api(req:NextRequest,parts:string[]) {
  }
 
  if(routeIs(parts,'auth','login')&&method==='POST') {
-   await checkLimit(req,'login',18,900);
    const body=await readJson(req);
+   if(!body || typeof body!=='object' || Array.isArray(body)) fail('Enter a valid email and password.');
+   await checkLimit(req,body.portal==='admin'?'admin_login':'login',body.portal==='admin'?8:18,900);
    const email=z.email().safeParse(body.email);
    if(!email.success||typeof body.password!=='string') fail('Enter a valid email and password.');
    const client=await userClient();
@@ -82,33 +83,6 @@ export async function api(req:NextRequest,parts:string[]) {
    return ok({role:profile.role,full_name:profile.full_name});
  }
 
-
- if(routeIs(parts,'auth','mfa')&&method==='GET') {
-   const {auth}=await currentUser(['lgu_admin','sys_admin'],false,true);
-   const [levels,factors]=await Promise.all([auth.auth.mfa.getAuthenticatorAssuranceLevel(),auth.auth.mfa.listFactors()]);
-   if(levels.error||factors.error) fail('Could not check administrator verification status.',503);
-   return ok({verified:levels.data.currentLevel==='aal2',factors:(factors.data.totp||[]).map(f=>({id:f.id,status:f.status,friendly_name:f.friendly_name}))});
- }
-
- if(routeIs(parts,'auth','mfa')&&method==='POST') {
-   await checkLimit(req,'admin_mfa',15,900);
-   const {auth}=await currentUser(['lgu_admin','sys_admin'],false,true);
-   const body=await readJson(req);
-   if(body.action==='enroll') {
-     const enrolled=await auth.auth.mfa.enroll({factorType:'totp',friendlyName:'JobLinkLocal Administrator'});
-     if(enrolled.error||!enrolled.data?.totp) fail(enrolled.error?.message||'Could not create authenticator enrollment.');
-     return ok({factorId:enrolled.data.id,qr_code:enrolled.data.totp.qr_code,secret:enrolled.data.totp.secret});
-   }
-   if(body.action==='verify') {
-     if(typeof body.factorId!=='string'||!/^\d{6}$/.test(String(body.code||''))) fail('Enter a valid six-digit authenticator code.');
-     const challenge=await auth.auth.mfa.challenge({factorId:body.factorId});
-     if(challenge.error||!challenge.data) fail('Unable to start authenticator verification.');
-     const result=await auth.auth.mfa.verify({factorId:body.factorId,challengeId:challenge.data.id,code:body.code});
-     if(result.error) fail('The authenticator code was not accepted.');
-     return ok({verified:true,message:'Administrator verification completed.'});
-   }
-   fail('Invalid verification action.');
- }
 
  if(routeIs(parts,'auth','logout')&&method==='POST') {
    const client=await userClient();
@@ -149,7 +123,7 @@ export async function api(req:NextRequest,parts:string[]) {
  }
 
  if(routeIs(parts,'me')&&method==='GET') {
-   const {user}=await currentUser(undefined,false,true);
+   const {user}=await currentUser();
    const profile=await findProfile(user.id);
    return ok({...profile,email_confirmed:!!user.email_confirmed_at});
  }

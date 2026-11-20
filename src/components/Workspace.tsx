@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import { Compass, Grid2X2, Bookmark, BriefcaseBusiness, Users, ShieldCheck, ClipboardCheck, BarChart3, Bell, UserRound, LogOut, Menu, X, ArrowUpRight, Activity, FileCheck2, Settings2, ScrollText } from 'lucide-react';
@@ -11,7 +11,6 @@ import { SeekerPanels } from '@/components/SeekerPanels';
 import { EmployerPanels } from '@/components/EmployerPanels';
 import { AdminPanels } from '@/components/AdminPanels';
 import { AccountPanels } from '@/components/AccountPanels';
-import { AdminMfaGate } from '@/components/AdminMfaGate';
 
 const tabDefinitions=[
  {id:'overview',label:'Overview',icon:Grid2X2,roles:['jobseeker','employer','lgu_admin','sys_admin']},
@@ -41,10 +40,8 @@ export function Workspace(){
  const [menu,setMenu]=useState(false);
  const [refresh,setRefresh]=useState(0);
  const [unread,setUnread]=useState(0);
- const [adminMfaPassed,setAdminMfaPassed]=useState(false);
  const seenNotifications=useRef<Set<string>|null>(null);
  const bump=()=>setRefresh(x=>x+1);
- const completeMfa=useCallback(()=>setAdminMfaPassed(true),[]);
  useEffect(()=>{
    const query=new URLSearchParams(window.location.search);
    setTab(query.get('tab')||'overview');
@@ -89,9 +86,6 @@ export function Workspace(){
  useEffect(()=>{if(role&&!tabs.some(t=>t.id===tab))navigate('overview');},[role,tabs,tab]);
  if(loading)return <div className="workspace-loading"><div className="loader-logo"><BriefcaseBusiness size={48}/></div><span>Loading your workspace…</span></div>;
  if(!me)return null;
- if((me.role==='lgu_admin'||me.role==='sys_admin')&&!adminMfaPassed){
-   return <AdminMfaGate onVerified={completeMfa} onLogout={logout}/>;
- }
  const active=tabs.find(t=>t.id===tab);
  const greeting=me.role==='employer'?'Review candidates and manage your openings.':me.role==='lgu_admin'?'Review and approve local opportunities.':me.role==='sys_admin'?'Monitor accounts and platform activity.':'Explore opportunities and track your applications.';
  const date=new Intl.DateTimeFormat('en-PH',{dateStyle:'full',timeZone:'Asia/Manila'}).format(new Date());

@@ -41,7 +41,7 @@ export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker'}:
   setBusy(true);
   try{
    await request('auth/login','POST',{email,password,portal});
-   toast.show('You are signed in.','success',portal==='admin'?'Proceed to your secure administration workspace.':'Your workspace is ready.');
+   toast.show('You are signed in.','success',portal==='admin'?'Opening your administration workspace.':'Your workspace is ready.');
    router.replace('/app');
    router.refresh();
   }catch(error){
@@ -62,7 +62,7 @@ export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker'}:
     </button>;
    })}
   </div>
-  <p className="auth-role-help">Your selection is verified against your account. {portal==='admin'?'Administrators will complete an additional security check.':'Your registered role must match this sign-in area.'}</p>
+  <p className="auth-role-help">Your selection is verified against your account. {portal==='admin'?'Your administrator account and access permissions are checked securely.':'Your registered role must match this sign-in area.'}</p>
   {verificationNeeded&&portal!=='admin'&&<div className="verification-help" role="status">
    <div className="verification-help-heading"><Mail size={18}/><strong>Email verification required</strong></div>
    <p>{invalidConfirmation?'Your confirmation link could not be verified. You can request a fresh link below.':'Confirm your email address before signing in. Check your inbox for the verification link.'}</p>
@@ -71,7 +71,7 @@ export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker'}:
   <form noValidate onSubmit={submit} className="form-stack">
    <label className="form-field"><span>Email address</span><input type="email" required autoComplete="email" placeholder="you@example.com" value={email} onChange={event=>setEmail(event.target.value)}/></label>
    <label className="form-field"><span>Password</span><div className="input-wrap"><input type={visible?'text':'password'} minLength={8} autoComplete="current-password" required placeholder="Enter your password" value={password} onChange={event=>setPassword(event.target.value)}/><button type="button" className="eye-button" onClick={()=>setVisible(!visible)} aria-label={visible?'Hide password':'Show password'}>{visible?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></label>
-   <div className="form-between"><span>Secured by Supabase Auth</span><Link href="/forgot">Forgot password?</Link></div>
+   <div className="form-between form-between-end"><Link href="/forgot">Forgot password?</Link></div>
    <button disabled={busy} className="btn btn-ink btn-form" type="submit">{busy?'Signing in…':`Continue as ${portal==='admin'?'administrator':portal}`} <ArrowRight size={19}/></button>
   </form>
   {portal==='admin'?<div className="auth-alt">Need an administrator account? Contact the existing System Admin.</div>:<div className="auth-alt">New to JobLinkLocal? <Link href={`/register?role=${portal}`}>Create a {portal==='employer'?'business':'jobseeker'} account <ArrowRight size={16}/></Link></div>}

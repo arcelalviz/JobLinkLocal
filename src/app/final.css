@@ -13,7 +13,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 ::selection{background:#f7b79d;color:#1a2a38}
 :where(.eyebrow,.item-overline,.metric-top,.stage-caption,.side-group-label,.op-no,.hero-kicker,.hero-bottom,.auth-art-top,.auth-art-bottom,.hero-art-caption,.community-card>span,.side-identity,.breadcrumb){font-family:'DM Mono',monospace!important;letter-spacing:.08em!important;font-weight:500!important}
 :where(.auth-content h1,.hero h1,.community-intro h2,.section-heading h2,.feature-copy h2,.footer-top h2,.failure-content h1){font-weight:600;letter-spacing:-.058em}
-:where(.hero h1 em,.section-heading h2 em,.community-intro h2 em,.feature-copy h2 em,.auth-art-main h2 em,.footer-top h2 em,.failure-content h1 em,.mfa-card h1 em){font-family:var(--serif)!important;font-weight:400!important;letter-spacing:-.035em!important}
+:where(.hero h1 em,.section-heading h2 em,.community-intro h2 em,.feature-copy h2 em,.auth-art-main h2 em,.footer-top h2 em,.failure-content h1 em){font-family:var(--serif)!important;font-weight:400!important;letter-spacing:-.035em!important}
 .btn{border-radius:9px;font-weight:600;letter-spacing:0;transition:background-color .18s,transform .18s,box-shadow .18s;will-change:auto}
 .btn:not(:disabled):hover{transform:translate3d(0,-2px,0)}
 .btn-lime{color:#fff!important;background:var(--orange)}
@@ -249,11 +249,6 @@ select{color-scheme:light}
 .failure-page{background:#e8f0ef;color:#243f4c}
 .failure-content h1 em{color:#c97359}
 .failure-number{color:#274d5c}
-.mfa-screen{background:#edf2f1}
-.mfa-card{background:#fff;border:1px solid #d7e4e4;border-radius:12px}
-.mfa-emblem{background:#e1eded;color:#2c6b74;border-radius:10px}
-.mfa-card h1 em{color:#c87556}
-.mfa-qr{background:#f0f5f5}
 
 @media(min-width:1400px){.hero{min-height:710px}.hero-left{padding-top:102px}}
 @media(max-width:1050px){.portal-select{gap:6px}.portal-option{padding:12px 9px}.portal-copy small{font-size:9px}}

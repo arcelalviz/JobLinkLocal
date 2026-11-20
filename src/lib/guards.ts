@@ -8,7 +8,7 @@ export class ApiError extends Error {
   constructor(public status:number, message:string) { super(message); }
 }
 
-export async function currentUser(roles?:Role[], requireApproved = false, skipAdminMfa = false) {
+export async function currentUser(roles?:Role[], requireApproved = false) {
   const auth = await userClient();
   const { data, error } = await auth.auth.getUser();
   if (error || !data.user) throw new ApiError(401, 'Please sign in to continue.');
@@ -16,10 +16,6 @@ export async function currentUser(roles?:Role[], requireApproved = false, skipAd
   if (profileError || !profile) throw new ApiError(403, 'Your account profile is unavailable.');
   const p = profile as Profile;
   if (p.lgu_status === 'suspended') throw new ApiError(403, 'This account has been suspended. Contact support.');
-  if (!skipAdminMfa && (p.role==='lgu_admin' || p.role==='sys_admin')) {
-    const {data:assurance,error:mfaError}=await auth.auth.mfa.getAuthenticatorAssuranceLevel();
-    if(mfaError || assurance.currentLevel!=='aal2') throw new ApiError(403,'Administrator authenticator verification is required.');
-  }
   if (roles && !roles.includes(p.role)) throw new ApiError(403, 'You do not have permission to perform this action.');
   if (requireApproved && p.lgu_status !== 'approved') throw new ApiError(403, 'LGU account approval is required before this action.');
   if (requireApproved && !data.user.email_confirmed_at) throw new ApiError(403, 'Please confirm your email address first.');
