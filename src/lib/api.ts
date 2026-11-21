@@ -7,6 +7,7 @@ import { sendSystemEmail, emailPerson, applicationDecisionNotice, employmentStat
 import { uploadPrivate } from '@/lib/uploads';
 import { signUpSchema, jobSchema, applicationSchema, decisionSchema, validated } from '@/lib/validators';
 import { reportData, csvReport, pdfReport } from '@/lib/report';
+import { isOlongapoBarangay } from '@/lib/olongapo';
 
 const db=()=>adminClient();
 const isUuid=(id:string)=>z.uuid().safeParse(id).success;
@@ -19,7 +20,7 @@ const parse=<T>(schema:z.ZodType<T>,body:unknown):T=>{
 };
 const routeIs=(route:string[],...parts:string[])=>route.join('/')===parts.join('/');
 const findProfile=async(id:string)=>{
- const {data,error}=await db().from('profiles').select('id,email,role,full_name,phone,city,province,bio,lgu_status,created_at,seeker_profiles(*),employer_profiles(*)').eq('id',id).single();
+ const {data,error}=await db().from('profiles').select('id,email,role,full_name,phone,city,province,barangay,address_line,bio,lgu_status,created_at,seeker_profiles(*),employer_profiles(*)').eq('id',id).single();
  dbError(error,'Profile unavailable.');
  return data;
 };
@@ -131,12 +132,14 @@ export async function api(req:NextRequest,parts:string[]) {
  if(routeIs(parts,'profile')&&method==='PATCH') {
    const {user,profile}=await currentUser();
    const body=await readJson(req);
-   const allowed=['full_name','phone','city','province','bio'];
+   const allowed=['full_name','phone','bio','barangay','address_line'];
    const patch:Record<string,string|null>={};
    for(const key of allowed) if(typeof body[key]==='string') {
      const val=body[key].trim();
-     const limit=key==='bio'?1200:120;
+     const limit=key==='bio'?1200:key==='address_line'?180:120;
      if((key==='full_name'&&val.length<2)||val.length>limit) fail(`Invalid ${key.replace('_',' ')}.`);
+     if(key==='barangay' && val && !isOlongapoBarangay(val)) fail('Select an Olongapo barangay.');
+     if(key==='address_line' && val.length>180) fail('The address is too long.');
      patch[key]=val;
    }
    if(Object.keys(patch).length) { const {error}=await db().from('profiles').update(patch).eq('id',user.id); dbError(error); }
@@ -164,8 +167,17 @@ export async function api(req:NextRequest,parts:string[]) {
    return ok(await findProfile(user.id));
  }
 
+ if(routeIs(parts,'businesses')&&method==='GET') {
+   const {data,error}=await db().from('employer_profiles')
+    .select('user_id,business_name,industry,business_type,profiles!inner(lgu_status,role)')
+    .eq('profiles.lgu_status','approved').eq('profiles.role','employer')
+    .order('business_name',{ascending:true}).limit(100);
+   dbError(error,'Unable to load verified businesses.');
+   return ok((data||[]).map(({user_id,business_name,industry,business_type}:any)=>({id:user_id,business_name,industry,business_type})));
+ }
+
  if(routeIs(parts,'jobs')&&method==='GET') {
-   let query=db().from('jobs').select('id,employer_id,company_name,title,category,description,requirements,benefits,location,work_setup,employment_type,experience_level,salary_min,salary_max,vacancies,schedule,deadline,screening_questions,status,published_at,created_at').eq('status','published').order('published_at',{ascending:false}).limit(60);
+   let query=db().from('jobs').select('id,employer_id,company_name,title,category,description,requirements,benefits,location,barangay,address_line,work_setup,employment_type,experience_level,salary_min,salary_max,salary_visible,vacancies,schedule,deadline,screening_questions,status,published_at,created_at').eq('status','published').order('published_at',{ascending:false}).limit(60);
    const text=take(str(q('q')),80);
    if(text) query=query.ilike('title',`%${text.replace(/[%_]/g,'\\$&')}%`);
    if(q('category')&&q('category')!=='All') query=query.eq('category',take(str(q('category')),80));
@@ -173,7 +185,7 @@ export async function api(req:NextRequest,parts:string[]) {
    if(q('setup')&&q('setup')!=='All') query=query.eq('work_setup',take(str(q('setup')),40));
    const {data,error}=await query;
    dbError(error,'Unable to load jobs.');
-   return ok(data||[]);
+   return ok((data||[]).map((job:any)=>job.salary_visible===false?{...job,salary_min:null,salary_max:null}:job));
  }
 
  if(parts[0]==='jobs'&&parts.length===2&&method==='GET') {
@@ -185,7 +197,7 @@ export async function api(req:NextRequest,parts:string[]) {
      const {user,profile}=await currentUser();
      if(data.employer_id!==user.id&&!['lgu_admin','sys_admin'].includes(profile.role)) fail('Job unavailable.',404);
    }
-   return ok(data);
+   return ok(data.status==='published'&&data.salary_visible===false?{...data,salary_min:null,salary_max:null}:data);
  }
 
  if(routeIs(parts,'jobs')&&method==='POST') {
@@ -220,7 +232,7 @@ export async function api(req:NextRequest,parts:string[]) {
 
  if(routeIs(parts,'verification')&&method==='GET') {
    const {user}=await currentUser();
-   const {data,error}=await db().from('verification_submissions').select('*,verification_documents(id,filename,media_type,bytes)').eq('user_id',user.id).order('created_at',{ascending:false}).limit(10);
+   const {data,error}=await db().from('verification_submissions').select('*,verification_documents(id,filename,document_type,media_type,bytes)').eq('user_id',user.id).order('created_at',{ascending:false}).limit(10);
    dbError(error,'Unable to load verification records.');
    return ok(data||[]);
  }
@@ -232,17 +244,20 @@ export async function api(req:NextRequest,parts:string[]) {
    if(existing?.length) fail('Your previous documents are already awaiting review.',409);
    if(Number(req.headers.get('content-length')||0)>18*1024*1024)fail('Upload size exceeds the allowed limit.',413);
    const form=await req.formData();
-   const files=form.getAll('documents').filter((file):file is File=>file instanceof File);
+   const supporting=form.getAll('documents').filter((file):file is File=>file instanceof File);
+   const permit=form.get('business_permit');
+   if(profile.role==='employer' && !(permit instanceof File)) fail('Upload your business permit for LGU verification.');
+   const files=profile.role==='employer'?[(permit as File),...supporting]:supporting;
    if(files.length<1||files.length>3) fail('Provide one to three verification documents.');
    const statement=take(str(form.get('statement')),1200);
    const {data:sub,error:subError}=await db().from('verification_submissions').insert({user_id:user.id,kind:profile.role,statement}).select('id').single();
    dbError(subError,'Could not open a verification request.');
    const uploaded:string[]=[];
    try {
-     for(const file of files){
+     for(const [index,file] of files.entries()){
        const item=await uploadPrivate('verification-documents',user.id,file);
        uploaded.push(item.path);
-       const {error}=await db().from('verification_documents').insert({submission_id:sub!.id,owner_id:user.id,bucket:'verification-documents',path:item.path,filename:item.filename,media_type:item.mime,bytes:item.bytes});
+       const {error}=await db().from('verification_documents').insert({submission_id:sub!.id,owner_id:user.id,bucket:'verification-documents',path:item.path,filename:item.filename,media_type:item.mime,bytes:item.bytes,document_type:profile.role==='employer' && index===0?'business_permit':'supporting'});
        dbError(error,'Could not save document metadata.');
      }
      const {error:statusError}=await db().from('profiles').update({lgu_status:'pending'}).eq('id',user.id);
@@ -281,7 +296,7 @@ export async function api(req:NextRequest,parts:string[]) {
    if(doc.owner_id!==user.id && !(profile.role==='lgu_admin' && profile.lgu_status==='approved')) fail('Not authorized.',403);
    const {data,error:storageError}=await db().storage.from('verification-documents').download(doc.path);
    if(storageError||!data) fail('Document could not be downloaded.',404);
-   return new NextResponse(await data.arrayBuffer(),{headers:{'Content-Type':doc.media_type,'Content-Disposition':`attachment; filename="document-${doc.id}.${doc.media_type==='application/pdf'?'pdf':doc.media_type==='image/png'?'png':'jpg'}"`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+   return new NextResponse(await data.arrayBuffer(),{headers:{'Content-Type':doc.media_type,'Content-Disposition':`inline; filename="document-${doc.id}.${doc.media_type==='application/pdf'?'pdf':doc.media_type==='image/png'?'png':'jpg'}"`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
  }
 
  if(routeIs(parts,'files','resume')&&method==='GET') {
@@ -389,7 +404,7 @@ export async function api(req:NextRequest,parts:string[]) {
    const {data:applications,error:appsError}=await db().from('applications').select('*,application_events(id,status,note,created_at)').in('job_id',jobIds).order('created_at',{ascending:false}).limit(500);
    dbError(appsError);
    const seekerIds=[...new Set((applications||[]).map((a:any)=>a.seeker_id))];
-   const {data:seekers}=seekerIds.length?await db().from('profiles').select('id,full_name,city,province,created_at,seeker_profiles(education,experience_years,skills,desired_role)').in('id',seekerIds):{data:[]};
+   const {data:seekers}=seekerIds.length?await db().from('profiles').select('id,full_name,city,province,barangay,created_at,seeker_profiles(education,experience_years,skills,desired_role)').in('id',seekerIds):{data:[]};
    const seekerMap=new Map((seekers||[]).map((s:any)=>[s.id,s]));
    const enriched=(applications||[]).map((a:any)=>({...a,seeker:seekerMap.get(a.seeker_id),job:jobs.find((j:any)=>j.id===a.job_id)}));
    const appIds=(applications||[]).map((a:any)=>a.id);
@@ -423,8 +438,8 @@ export async function api(req:NextRequest,parts:string[]) {
  if(routeIs(parts,'lgu')&&method==='GET') {
    await currentUser(['lgu_admin'],true);
    const [verifications,jobs]=await Promise.all([
-     db().from('verification_submissions').select('id,user_id,kind,status,statement,created_at,profiles!verification_submissions_user_id_fkey(id,full_name,email,role,city,province),verification_documents(id,filename,media_type,bytes)').eq('status','pending').order('created_at',{ascending:true}).limit(100),
-     db().from('jobs').select('id,title,company_name,category,location,employment_type,created_at,description,requirements,employer_id').eq('status','pending').order('created_at',{ascending:true}).limit(100)
+     db().from('verification_submissions').select('id,user_id,kind,status,statement,created_at,profiles!verification_submissions_user_id_fkey(id,full_name,email,role,city,province,barangay),verification_documents(id,filename,document_type,media_type,bytes)').eq('status','pending').order('created_at',{ascending:true}).limit(100),
+     db().from('jobs').select('id,title,company_name,category,location,barangay,employment_type,created_at,description,requirements,employer_id').eq('status','pending').order('created_at',{ascending:true}).limit(100)
    ]);
    dbError(verifications.error);
    dbError(jobs.error);

@@ -8,6 +8,8 @@ create table public.profiles (
  phone text,
  city text,
  province text,
+ barangay text,
+ address_line text,
  bio text,
  avatar_url text,
  lgu_status text not null default 'pending' check(lgu_status in ('pending','approved','rejected','suspended')),
@@ -58,6 +60,9 @@ create table public.jobs (
  requirements text not null,
  benefits text,
  location text not null,
+ barangay text,
+ address_line text,
+ salary_visible boolean not null default true,
  work_setup text not null check(work_setup in ('On-site','Remote','Hybrid')),
  employment_type text not null check(employment_type in ('Full-time','Part-time','Contract','Internship','Temporary')),
  experience_level text not null default 'Entry level',
@@ -147,6 +152,7 @@ create table public.verification_documents (
  bucket text not null check(bucket = 'verification-documents'),
  path text not null unique,
  filename text not null,
+ document_type text not null default 'supporting',
  media_type text not null,
  bytes integer not null,
  created_at timestamptz not null default now()
@@ -213,8 +219,8 @@ declare
 begin
  v_role := case when new.raw_user_meta_data->>'role' = 'employer' then 'employer' else 'jobseeker' end;
  v_full_name := left(coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'),''),'New member'),120);
- insert into public.profiles (id,email,role,full_name,phone,city,province)
- values (new.id,coalesce(new.email,''),v_role,v_full_name,left(new.raw_user_meta_data->>'phone',30),left(new.raw_user_meta_data->>'city',100),left(new.raw_user_meta_data->>'province',100));
+ insert into public.profiles (id,email,role,full_name,phone,city,province,barangay,address_line)
+ values (new.id,coalesce(new.email,''),v_role,v_full_name,left(new.raw_user_meta_data->>'phone',30),left(new.raw_user_meta_data->>'city',100),left(new.raw_user_meta_data->>'province',100),left(new.raw_user_meta_data->>'barangay',80),left(new.raw_user_meta_data->>'address_line',180));
  if v_role = 'employer' then
   insert into public.employer_profiles (user_id,business_name,industry,business_type,registration_number,team_size,website,business_description,contact_position)
   values (new.id,left(coalesce(nullif(new.raw_user_meta_data->>'business_name',''),'Unnamed business'),160),left(new.raw_user_meta_data->>'industry',120),left(new.raw_user_meta_data->>'business_type',90),left(new.raw_user_meta_data->>'registration_number',100),left(new.raw_user_meta_data->>'team_size',40),left(new.raw_user_meta_data->>'website',255),left(new.raw_user_meta_data->>'business_description',1200),left(new.raw_user_meta_data->>'contact_position',100));

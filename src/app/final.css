@@ -288,3 +288,8 @@ select{color-scheme:light}
 .trend-chart circle{fill:#e9a27e;stroke:#27586b}
 
 .verification-help{display:grid;gap:10px;margin:4px 0 22px;padding:18px 20px;border:1px solid #b9d1cb;border-radius:12px;background:#eef5f2;color:#21483f}.verification-help-heading{display:flex;align-items:center;gap:10px;font-size:13px}.verification-help-heading svg{color:#2a7565}.verification-help p{font-size:12px;line-height:1.65;color:#4e665f;margin:0}.verification-help-action{display:inline-flex;align-items:center;justify-content:space-between;gap:9px;width:fit-content;border:0;border-radius:8px;padding:10px 14px;background:#1d483b;color:#fff;font-size:12px;font-weight:700;cursor:pointer}.verification-help-action:hover{background:#28614f}.verification-help-action:focus-visible{outline:3px solid #70aa99;outline-offset:3px}.verification-help-action:disabled{opacity:.55;cursor:wait}
+
+.role-jobseeker .side-link.selected { border-left:3px solid #279278; }
+.role-employer .side-link.selected { border-left:3px solid #398ca3; }
+.role-lgu_admin .side-link.selected { border-left:3px solid #6a8eb1; }
+.role-sys_admin .side-link.selected { border-left:3px solid #788ba8; }

@@ -11,6 +11,7 @@ import { SeekerPanels } from '@/components/SeekerPanels';
 import { EmployerPanels } from '@/components/EmployerPanels';
 import { AdminPanels } from '@/components/AdminPanels';
 import { AccountPanels } from '@/components/AccountPanels';
+import { BrandMark } from '@/components/BrandMark';
 
 const tabDefinitions=[
  {id:'overview',label:'Overview',icon:Grid2X2,roles:['jobseeker','employer','lgu_admin','sys_admin']},
@@ -92,7 +93,7 @@ export function Workspace(){
  return <div className={`workspace role-${me.role}`}>
   {menu&&<div className="mobile-menu-shade" onClick={()=>setMenu(false)}/>}
   <aside className={`workspace-sidebar ${menu?'is-open':''}`}>
-   <div className="side-logo"><Link href="/" className="brand"><span className="brand-icon"><BriefcaseBusiness size={18}/></span><span>joblink<span className="brand-soft">local</span></span></Link><button className="mobile-side-close" onClick={()=>setMenu(false)}><X size={20}/></button></div>
+   <div className="side-logo"><Link href="/" className="brand"><span className="brand-icon"><BrandMark size={34}/></span><span>joblink<span className="brand-soft">local</span></span></Link><button className="mobile-side-close" onClick={()=>setMenu(false)}><X size={20}/></button></div>
    <div className="side-identity"><span className="workspace-bullet"/> <span>WORKSPACE / {roleNames[me.role].toUpperCase()}</span></div>
    <nav className="side-navigation" aria-label="Workspace navigation">
     <div className="side-group-label">YOUR WORKSPACE</div>
@@ -127,7 +128,7 @@ function Overview({role,me,navigate,refresh}:{role:Role;me:Profile;navigate:(tab
    sys_admin:{one:'A reliable platform supports every opportunity.',two:'Support your community with oversight, stability and clear accountability.',action:'Manage accounts',tab:'users'}
  };
  return <div className="overview-layout">
-   <div className="metrics-grid">{Object.entries(stats).slice(0,4).map(([key,value],i)=><div className="metric-card" key={key}><span className="metric-top"><span>0{i+1} / {key.replace(/_/g,' ').toUpperCase()}</span><Activity size={18}/></span><strong>{String(value)}</strong><small>Live platform data</small></div>)}{!Object.keys(stats).length&&[1,2,3].map(i=><div className="metric-card" key={i}><span className="metric-top">LOADING</span><strong>—</strong><small>Connecting to your workspace</small></div>)}</div>
+   <div className="metrics-grid">{Object.entries(stats).slice(0,4).map(([key,value],i)=>{const target=role==='jobseeker'?(key==='applications'?'applications':key==='saved'?'saved':'discover'):role==='employer'?(key==='applicants'?'candidates':'jobs'):role==='lgu_admin'?(key==='pending_reviews'?'reviews':'reports'):key==='users'?'users':'reports';return <button type="button" className="metric-card metric-action" onClick={()=>navigate(target)} key={key}><span className="metric-top"><span>0{i+1} / {key.replace(/_/g,' ').toUpperCase()}</span><Activity size={18}/></span><strong>{String(value)}</strong><small>View {target.replace('_',' ') } <ArrowUpRight size={13}/></small></button>;})}{!Object.keys(stats).length&&[1,2,3].map(i=><div className="metric-card" key={i}><span className="metric-top">LOADING</span><strong>—</strong><small>Connecting to your workspace</small></div>)}</div>
    <div className="overview-spotlight"><div className="spotlight-copy"><p className="eyebrow">YOUR WORKSPACE</p><h2>{copy[role].one}</h2><p>{copy[role].two}</p><button onClick={()=>navigate(copy[role].tab)} className="btn btn-lime">{copy[role].action} <ArrowUpRight size={18}/></button></div><div className="spotlight-art"><div className="spotlight-ring"><div className="spotlight-center"><Compass size={56} strokeWidth={1.15}/></div></div><span>LOCAL OPPORTUNITIES</span></div></div>
    {me.lgu_status!=='approved'&&['jobseeker','employer'].includes(role)&&<div className="approval-banner"><ShieldCheck size={22}/><div><strong>{me.lgu_status==='rejected'?'Your documents need a new review.':'Your account needs LGU verification.'}</strong><p>Submit your credentials to unlock job applications and employer posting.</p></div><button onClick={()=>navigate('verification')}>Start verification <ArrowUpRight size={17}/></button></div>}
    <div className="overview-foot"><span><span className="signal-dot"/> CONNECTED · SECURE WORKSPACE</span><span>LOCAL OPPORTUNITIES. CLEAR NEXT STEPS.</span></div>

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { OLONGAPO_BARANGAYS } from '@/lib/olongapo';
 
 const short = z.string().trim().min(2).max(160);
 const optional = (max=1000) => z.string().trim().max(max).optional().nullable();
@@ -9,8 +10,10 @@ export const signUpSchema = z.object({
   email:z.email().max(254),
   password:z.string().min(12).max(128).regex(/[A-Z]/).regex(/[a-z]/).regex(/[0-9]/),
   phone:z.string().trim().min(7).max(30),
-  city:short,
-  province:short,
+  city:z.literal('Olongapo City'),
+  province:z.literal('Zambales'),
+  barangay:z.enum(OLONGAPO_BARANGAYS),
+  address_line:z.string().trim().min(3).max(180),
   education:optional(100),
   experience_years:z.coerce.number().int().min(0).max(65).optional(),
   skills:optional(500),
@@ -35,6 +38,9 @@ export const jobSchema = z.object({
  requirements:z.string().trim().min(20).max(6000),
  benefits:optional(4000),
  location:short,
+ barangay:z.enum(OLONGAPO_BARANGAYS),
+ address_line:z.string().trim().min(3).max(180),
+ salary_visible:z.boolean().default(true),
  work_setup:z.enum(['On-site','Remote','Hybrid']),
  employment_type:z.enum(['Full-time','Part-time','Contract','Internship','Temporary']),
  experience_level:z.enum(['Entry level','Mid level','Senior level','Any level']),

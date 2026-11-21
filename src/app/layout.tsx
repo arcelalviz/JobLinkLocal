@@ -8,6 +8,7 @@ export const metadata:Metadata={
  title:{default:'JobLinkLocal — Local opportunity, clearly connected',template:'%s · JobLinkLocal'},
  description:'JobLinkLocal connects verified local jobseekers and employers through clear application tracking, secure LGU review, and professional hiring workflows.',
  applicationName:'JobLinkLocal',
+ icons:{icon:'/images/joblinklocal-icon.png',apple:'/images/joblinklocal-icon.png'},
  robots:{index:true,follow:true}
 };
 
