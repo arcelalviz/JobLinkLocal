@@ -3,6 +3,7 @@ import { ToastProvider } from '@/components/ToastProvider';
 import './globals.css';
 import './final.css';
 import './professional.css';
+import './palette.css';
 
 export const metadata:Metadata={
  title:{default:'JobLinkLocal — Local opportunity, clearly connected',template:'%s · JobLinkLocal'},

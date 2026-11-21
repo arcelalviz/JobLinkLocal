@@ -1,7 +1,7 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 :root{
  --ink:#182a39;--muted:#637482;--cream:#f5f4ef;--white:#fffefa;--lime:#e58a63;--line:#dce1e1;--mint:#b5d9d9;--coral:#da7555;--violet:#a5bbcf;--deep:#102435;
- --serif:'Instrument Serif',Georgia,serif;--sans:'IBM Plex Sans',Arial,sans-serif;
+ --serif:'Inter','Segoe UI',Arial,sans-serif;--sans:'Inter','Segoe UI',Arial,sans-serif;
  --orange:#d77553;--pine:#2e726e;--paper:#f5f4ef;--navy:#172938;--edge:#dbe1e3;
 }
 html{scroll-behavior:smooth}
@@ -11,7 +11,7 @@ button,input,textarea,select{accent-color:#316f73}
 button,a{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid #3c8794;outline-offset:3px}
 ::selection{background:#f7b79d;color:#1a2a38}
-:where(.eyebrow,.item-overline,.metric-top,.stage-caption,.side-group-label,.op-no,.hero-kicker,.hero-bottom,.auth-art-top,.auth-art-bottom,.hero-art-caption,.community-card>span,.side-identity,.breadcrumb){font-family:'DM Mono',monospace!important;letter-spacing:.08em!important;font-weight:500!important}
+:where(.eyebrow,.item-overline,.metric-top,.stage-caption,.side-group-label,.op-no,.hero-kicker,.hero-bottom,.auth-art-top,.auth-art-bottom,.hero-art-caption,.community-card>span,.side-identity,.breadcrumb){font-family:var(--sans)!important;letter-spacing:.08em!important;font-weight:500!important}
 :where(.auth-content h1,.hero h1,.community-intro h2,.section-heading h2,.feature-copy h2,.footer-top h2,.failure-content h1){font-weight:600;letter-spacing:-.058em}
 :where(.hero h1 em,.section-heading h2 em,.community-intro h2 em,.feature-copy h2 em,.auth-art-main h2 em,.footer-top h2 em,.failure-content h1 em){font-family:var(--serif)!important;font-weight:400!important;letter-spacing:-.035em!important}
 .btn{border-radius:9px;font-weight:600;letter-spacing:0;transition:background-color .18s,transform .18s,box-shadow .18s;will-change:auto}
@@ -59,7 +59,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .hero-art-caption{color:#9bb5c0}
 .shape-index{color:#b3cbd5}
 .hero-tape{height:58px;background:#f0e6d9;color:#213c48;transform:none;box-shadow:none;border-bottom:1px solid #ddd5cb}
-.tape-inner{font:500 11px 'DM Mono',monospace;gap:34px;letter-spacing:.08em}
+.tape-inner{font:500 11px var(--sans);gap:34px;letter-spacing:.08em}
 .tape-divider{height:14px;width:2px;background:#d77b56;display:block;transform:rotate(24deg)}
 .atlas-fallback{position:absolute;inset:4%;background:radial-gradient(circle at 52% 48%,rgba(229,136,98,.12),transparent 57%);transform:rotate(-9deg)}
 .atlas-rail{position:absolute;width:71%;height:2px;background:#98c9d2;transform-origin:center;left:16%;top:48%}
@@ -94,7 +94,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .feature-stage{background:#1c3445;color:#f7f5f0;padding:102px 0}
 .feature-art{background:#eeeae1;color:#254653;min-height:520px;border-radius:11px}
 .feature-art:after{background:linear-gradient(90deg,rgba(46,93,100,.08) 1px,transparent 1px),linear-gradient(rgba(46,93,100,.08) 1px,transparent 1px);background-size:35px 35px}
-.feature-art-top,.feature-art-bottom{font-family:'DM Mono',monospace;font-size:10px;font-weight:500}
+.feature-art-top,.feature-art-bottom{font-family:var(--sans);font-size:10px;font-weight:500}
 .feature-circle{animation:none!important;width:320px;height:320px;border:1px solid #86a8ae}
 .feature-circle:before{border-color:#bcc9c9;width:265px;height:265px}
 .feature-circle-inside{animation:none!important;background:#244e59;color:#f2d0a7;border-radius:9px;box-shadow:16px 14px 0 #d5b5a3}
@@ -107,7 +107,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .community-card:hover{transform:translate3d(0,-3px,0)}
 .seeker-card{background:#e5ebeb!important;color:#183746!important}
 .employer-card{background:#e7c1a9!important;color:#293b44!important}
-.community-figure{opacity:.14;font-family:'Instrument Serif',serif;font-weight:400}
+.community-figure{opacity:.14;font-family:var(--sans);font-weight:400}
 .site-footer{background:#132a3b;color:#faf8f1}
 .footer-button{background:#e48b67;color:#162d37}
 
