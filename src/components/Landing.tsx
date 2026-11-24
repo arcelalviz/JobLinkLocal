@@ -6,12 +6,13 @@ import { ArrowRight, ArrowUpRight, BriefcaseBusiness, Building2, Check, ChevronR
 import { request } from '@/lib/http';
 import type { Job } from '@/types';
 import { BrandMark } from '@/components/BrandMark';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { manilaTimestamp } from '@/lib/olongapo';
 
 const setup = [
   { number: '01', title: 'Create your account', description: 'Build a detailed profile as a jobseeker or employer.' },
   { number: '02', title: 'Complete verification', description: 'Submit the required credentials for LGU review.' },
-  { number: '03', title: 'Take the next step', description: 'Discover positions or recruit candidates with clarity.' }
+  { number: '03', title: 'Apply or hire', description: 'Browse jobs or review candidates.' }
 ];
 
 function formatSalary(job: Job) {
@@ -47,7 +48,7 @@ export function Landing() {
 
   return <main className="professional-site" id="top">
     <a className="pro-skip" href="#opportunities">Skip to job opportunities</a>
-    <div className="pro-utility-bar"><div className="pro-container"><span>JOBLINKLOCAL <span className="pro-utility-separator">/</span> LOCAL EMPLOYMENT PLATFORM</span><span className="pro-utility-right"><ShieldCheck size={14} /> Account and job verification through LGU review</span></div></div>
+    <div className="pro-utility-bar"><div className="pro-container"><span>OLONGAPO CITY</span><span className="pro-utility-right"><ThemeToggle/></span></div></div>
     <header className="pro-header">
       <div className="pro-container pro-header-inner">
         <Link href="/" className="pro-logo" aria-label="JobLinkLocal home"><span className="pro-logo-symbol"><BrandMark size={34}/></span><span>joblink<strong>local</strong></span></Link>
@@ -63,56 +64,56 @@ export function Landing() {
 
     <section className="pro-hero" aria-labelledby="hero-title">
       <div className="pro-container pro-hero-grid">
-        <div className="pro-hero-copy"><div className="pro-audience-toggle" role="group" aria-label="Choose what you're here to do"><button type="button" className={audience==='jobseeker'?'active':''} onClick={()=>setAudience('jobseeker')}>I'm looking for a job</button><button type="button" className={audience==='employer'?'active':''} onClick={()=>setAudience('employer')}>I'm hiring</button></div><div className="pro-tag"><span className="pro-tag-line"/> {audience==='jobseeker'?'FOR OLONGAPO JOBSEEKERS':'FOR OLONGAPO EMPLOYERS'}</div>
-          <h1 id="hero-title">{audience==='jobseeker'?<>Your next opportunity.<br/><span>Right here in Olongapo.</span></>:<>Build your team.<br/><span>Hire with confidence.</span></>}</h1>
-          <p>{audience==='jobseeker'?'Find openings in your barangay, explore verified employers, and track each application in one place.':'Post detailed openings, review candidates and manage recruitment with transparent LGU verification.'}</p>
-          <div className="pro-hero-actions"><Link className="pro-button pro-button-primary pro-button-large" href={audience==='jobseeker'?'#opportunities':'/register?role=employer'}>{audience==='jobseeker'?'Explore jobs':'Register your business'} <ArrowRight size={18}/></Link><a className="pro-text-link" href={audience==='jobseeker'?'#business-directory':'#how-it-works'}>{audience==='jobseeker'?'Meet verified employers':'How employer approval works'} <ArrowUpRight size={17}/></a></div>
-          <div className="pro-trust-line"><span><CircleCheck size={17}/> Clear application updates</span><span><FileCheck2 size={17}/> LGU review process</span></div>
+        <div className="pro-hero-copy"><div className="pro-audience-toggle" role="group" aria-label="Choose what you're here to do"><button type="button" className={audience==='jobseeker'?'active':''} onClick={()=>setAudience('jobseeker')}>I'm looking for a job</button><button type="button" className={audience==='employer'?'active':''} onClick={()=>setAudience('employer')}>I'm hiring</button></div>
+          <h1 id="hero-title">{audience==='jobseeker'?<>Find jobs in Olongapo City</>:<>Hire in Olongapo City</>}</h1>
+          <p>{audience==='jobseeker'?'Browse local job postings and track applications.':'Post vacancies, review applicants and manage hiring.'}</p>
+          <div className="pro-hero-actions"><Link className="pro-button pro-button-primary pro-button-large" href={audience==='jobseeker'?'#opportunities':'/register?role=employer'}>{audience==='jobseeker'?'Explore jobs':'Register your business'} <ArrowRight size={18}/></Link><a className="pro-text-link" href={audience==='jobseeker'?'#business-directory':'#how-it-works'}>{audience==='jobseeker'?'Verified businesses':'How employer approval works'} <ArrowUpRight size={17}/></a></div>
+          <div className="pro-trust-line"><span><CircleCheck size={17}/> Application status tracking</span><span><FileCheck2 size={17}/> LGU review process</span></div>
         </div>
         <div className="pro-hero-panel" aria-label={audience==='jobseeker'?'Latest employment opportunities preview':'Verified businesses preview'}>
-          <div className="pro-panel-head"><div><span className="pro-overline">JOBLINKLOCAL / {audience==='jobseeker'?'OPPORTUNITIES':'BUSINESS COMMUNITY'}</span><h2>{audience==='jobseeker'?'Latest openings':'Verified local businesses'}</h2></div><span className="pro-panel-status"><span/> Live listings</span></div>
+          <div className="pro-panel-head"><div><h2>{audience==='jobseeker'?'Latest openings':'Verified local businesses'}</h2></div></div>
           <div className="pro-panel-body">
-            {audience==='employer' ? (businesses.length?businesses.slice(0,3).map(business=><div className="pro-preview-job" key={business.id}><span className="pro-preview-company"><Building2 size={18}/></span><div><strong>{business.business_name}</strong><span>{business.industry||'Registered employer'} · LGU-verified account</span></div><ChevronRight size={18} className="pro-preview-arrow"/></div>):<div className="pro-panel-message">Verified businesses will appear as they join.</div>) : loading ? <div className="pro-panel-message">Loading available positions…</div> : loadError ? <div className="pro-panel-message">Open positions could not be loaded right now.</div> : jobs.length === 0 ? <div className="pro-panel-message">No published positions yet. Explore JobLinkLocal as new opportunities arrive.</div> : jobs.slice(0, 3).map(job => <div className="pro-preview-job" key={job.id}>
+            {audience==='employer' ? (businesses.length?businesses.slice(0,3).map(business=><div className="pro-preview-job" key={business.id}><span className="pro-preview-company"><Building2 size={18}/></span><div><strong>{business.business_name}</strong><span>{business.industry||'Registered employer'} · LGU-verified account</span></div><ChevronRight size={18} className="pro-preview-arrow"/></div>):<div className="pro-panel-message">Verified businesses will appear as they join.</div>) : loading ? <div className="pro-panel-message">Loading available positions…</div> : loadError ? <div className="pro-panel-message">Open positions could not be loaded right now.</div> : jobs.length === 0 ? <div className="pro-panel-message">No published jobs available.</div> : jobs.slice(0, 3).map(job => <Link href={`/jobs/${job.id}`} className="pro-preview-job jl-preview-clickable" key={job.id}>
               <span className="pro-preview-company"><Building2 size={18}/></span>
               <div><strong>{job.title}</strong><span>{job.company_name} · {job.location}</span></div>
               <ChevronRight size={18} className="pro-preview-arrow"/>
-            </div>)}
+            </Link>)}
           </div>
           <div className="pro-panel-footer"><span>{audience==='employer'?`${businesses.length} verified platform employers`:!loading&&!loadError?`${jobs.length} published ${jobs.length===1?'position':'positions'}`:'Current listings'}</span><a href={audience==='employer'?'#business-directory':'#opportunities'}>{audience==='employer'?'View businesses':'Browse roles'} <ArrowUpRight size={16}/></a></div>
         </div>
       </div>
     </section>
 
-    <section className="pro-value-strip"><div className="pro-container"><div><ShieldCheck size={20}/><span><strong>Account verification</strong><small>LGU credential review</small></span></div><div><BriefcaseBusiness size={20}/><span><strong>Recruitment management</strong><small>From application to hiring</small></span></div><div><FileCheck2 size={20}/><span><strong>Clear records</strong><small>Track status and decisions</small></span></div></div></section>
+    <section className="pro-value-strip"><div className="pro-container"><div><ShieldCheck size={20}/><span><strong>LGU verification</strong></span></div><div><BriefcaseBusiness size={20}/><span><strong>Applications and hiring</strong></span></div><div><FileCheck2 size={20}/><span><strong>Status history</strong></span></div></div></section>
 
     <section className="pro-section pro-opportunities" id="opportunities">
       <div className="pro-container">
-        <div className="pro-section-heading"><div><span className="pro-overline">DISCOVER OPPORTUNITIES</span><h2>Explore available positions.</h2></div><p>Local opportunities, organized to help you find work that matches your experience and goals.</p></div>
+        <div className="pro-section-heading"><div><h2>Job listings</h2></div></div>
         <label className="pro-search"><Search size={20}/><span className="sr-only">Search available jobs</span><input aria-label="Search jobs by title, employer or location" placeholder="Search by job title, employer, or location" value={search} onChange={event => setSearch(event.target.value)}/><span className="pro-search-result">{loading ? 'Loading' : `${visibleJobs.length} ${visibleJobs.length===1?'result':'results'}`}</span></label>
         <div className="pro-job-grid">
           {loading ? <div className="pro-no-jobs">Loading current openings…</div> : loadError ? <div className="pro-no-jobs">We couldn't load job listings. Please try again later.</div> : visibleJobs.length === 0 ? <div className="pro-no-jobs">{search ? 'No openings match that search. Try another keyword.' : 'There are no published openings at the moment.'}</div> : visibleJobs.slice(0, 6).map(job => <article className="pro-job-card" key={job.id}>
             <div className="pro-job-card-top"><span className="pro-job-category">{job.category || 'Opportunity'}</span><span className="pro-job-work">{job.work_setup}</span></div>
-            <div className="pro-job-company"><Building2 size={17}/>{job.company_name}</div><h3>{job.title}</h3>
+            <div className="pro-job-company"><Building2 size={17}/>{job.company_name}</div><h3><Link href={`/jobs/${job.id}`} className="jl-job-title-link">{job.title}</Link></h3>
             <p className="pro-job-location"><MapPin size={16}/>{job.barangay?`Brgy. ${job.barangay}, Olongapo City`:job.location}</p><p className="pro-posted-time">Posted {manilaTimestamp(job.published_at||job.created_at)}</p>
-            <div className="pro-job-footer"><div><strong>{formatSalary(job)}</strong><span>{job.employment_type}</span></div><Link href="/login?portal=jobseeker" className="pro-job-action" aria-label={`Sign in to apply for ${job.title}`}><ArrowUpRight size={19}/></Link></div>
+            <div className="pro-job-footer"><div><strong>{formatSalary(job)}</strong><span>{job.employment_type}</span></div><Link href={`/jobs/${job.id}`} className="pro-job-action" aria-label={`View details for ${job.title}`}><ArrowUpRight size={19}/></Link></div>
           </article>)}
         </div>
         <div className="pro-section-bottom"><span>All applications are managed through your personal workspace.</span><Link href="/register?role=jobseeker" className="pro-inline-link">Create a jobseeker account <ArrowRight size={17}/></Link></div>
       </div>
     </section>
 
-    <section className="pro-section pro-business-directory" id="business-directory"><div className="pro-container"><div className="pro-section-heading"><div><span className="pro-overline">PLATFORM DIRECTORY</span><h2>Businesses verified on JobLinkLocal.</h2></div><p>Organizations below have approved employer accounts on this platform. This is not the official Olongapo City business registry.</p></div><div className="pro-business-grid">{businesses.length?businesses.map(business=><article className="pro-business-card" key={business.id}><div className="pro-business-symbol"><Building2 size={22}/></div><strong>{business.business_name}</strong><span>{business.industry||business.business_type||'Local business'}</span><small><ShieldCheck size={14}/> LGU-verified platform account</small></article>):<p className="pro-no-jobs">No verified employers listed yet.</p>}</div></div></section>
+    <section className="pro-section pro-business-directory" id="business-directory"><div className="pro-container"><div className="pro-section-heading"><div><h2>Verified businesses</h2></div><p>Organizations below have approved employer accounts on this platform. This is not the official Olongapo City business registry.</p></div><div className="pro-business-grid">{businesses.length?businesses.map(business=><article className="pro-business-card" key={business.id}><div className="pro-business-symbol"><Building2 size={22}/></div><strong>{business.business_name}</strong><span>{business.industry||business.business_type||'Local business'}</span><small><ShieldCheck size={14}/> LGU-verified platform account</small></article>):<p className="pro-no-jobs">No verified employers listed yet.</p>}</div></div></section>
 
     <section className="pro-section pro-process" id="how-it-works"><div className="pro-container">
-      <div className="pro-process-heading"><div><span className="pro-overline">SIMPLE BY DESIGN</span><h2>A clearer path to opportunity.</h2></div><p>JobLinkLocal brings every important step together, from setting up an account to making informed hiring decisions.</p></div>
+      <div className="pro-process-heading"><div><h2>Registration and verification</h2></div></div>
       <div className="pro-process-grid">{setup.map(item => <div className="pro-process-step" key={item.number}><span className="pro-step-number">{item.number}</span><h3>{item.title}</h3><p>{item.description}</p></div>)}</div>
     </div></section>
 
     <section className="pro-section pro-employer" id="employers"><div className="pro-container pro-employer-inner">
-      <div><span className="pro-overline">FOR LOCAL EMPLOYERS</span><h2>Build the team behind your next milestone.</h2><p>Publish detailed roles, review applicants, record decisions, and keep candidates informed—all in one recruitment workspace.</p><Link href="/register?role=employer" className="pro-button pro-button-white">Create an employer account <ArrowUpRight size={18}/></Link></div>
+      <div><h2>Employer registration</h2><Link href="/register?role=employer" className="pro-button pro-button-white">Create an employer account <ArrowUpRight size={18}/></Link></div>
       <div className="pro-employer-checklist" aria-label="Employer platform capabilities"><div><Check size={19}/> Job postings with clear requirements</div><div><Check size={19}/> Organized candidate pipeline</div><div><Check size={19}/> Professional application notifications</div><div><Check size={19}/> Recorded hiring and employment updates</div></div>
     </div></section>
 
-    <footer className="pro-footer"><div className="pro-container"><div className="pro-footer-main"><Link href="/" className="pro-logo"><span className="pro-logo-symbol"><BriefcaseBusiness size={18}/></span><span>joblink<strong>local</strong></span></Link><p>Better connections for local talent and businesses.</p><div><Link href="/login">Sign in</Link><Link href="/register">Create account</Link><a href="#top">Back to top</a></div></div><div className="pro-footer-bottom"><span>© {new Date().getFullYear()} JobLinkLocal</span><span>Local opportunity, professionally connected.</span></div></div></footer>
+    <footer className="pro-footer"><div className="pro-container"><div className="pro-footer-main"><Link href="/" className="pro-logo"><span className="pro-logo-symbol"><BriefcaseBusiness size={18}/></span><span>joblink<strong>local</strong></span></Link><p>Olongapo City jobs and recruitment.</p><div><Link href="/login">Sign in</Link><Link href="/register">Create account</Link><a href="#top">Back to top</a></div></div><div className="pro-footer-bottom"><span>© {new Date().getFullYear()} JobLinkLocal</span><span>Olongapo City</span></div></div></footer>
   </main>;
 }

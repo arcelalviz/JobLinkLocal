@@ -5,6 +5,7 @@ import { userClient } from '@/lib/supabase/server';
 import { ApiError, currentUser, requireSameOrigin, checkLimit, readJson, dbError, recordAudit, notify, ok } from '@/lib/guards';
 import { sendSystemEmail, emailPerson, applicationDecisionNotice, employmentStatusNotice } from '@/lib/mail';
 import { uploadPrivate } from '@/lib/uploads';
+import { matchJobSkills, normalizeSkills } from '@/lib/skillMatching';
 import { signUpSchema, jobSchema, applicationSchema, decisionSchema, validated } from '@/lib/validators';
 import { reportData, csvReport, pdfReport } from '@/lib/report';
 import { isOlongapoBarangay } from '@/lib/olongapo';
@@ -20,7 +21,7 @@ const parse=<T>(schema:z.ZodType<T>,body:unknown):T=>{
 };
 const routeIs=(route:string[],...parts:string[])=>route.join('/')===parts.join('/');
 const findProfile=async(id:string)=>{
- const {data,error}=await db().from('profiles').select('id,email,role,full_name,phone,city,province,barangay,address_line,bio,lgu_status,created_at,seeker_profiles(*),employer_profiles(*)').eq('id',id).single();
+ const {data,error}=await db().from('profiles').select('id,email,role,full_name,phone,city,province,barangay,address_line,bio,avatar_url,lgu_status,created_at,seeker_profiles(*),employer_profiles(*)').eq('id',id).single();
  dbError(error,'Profile unavailable.');
  return data;
 };
@@ -103,7 +104,7 @@ export async function api(req:NextRequest,parts:string[]) {
  if(routeIs(parts,'auth','password')&&method==='POST') {
    const {user,auth}=await currentUser();
    const body=await readJson(req);
-   if(typeof body.password!=='string'||body.password.length<12||!/[A-Z]/.test(body.password)||!/[a-z]/.test(body.password)||!/[0-9]/.test(body.password)) fail('Choose a password with at least 12 characters, upper and lowercase letters, and a number.');
+   if(typeof body.password!=='string'||body.password.length<8||!/[A-Z]/.test(body.password)||!/[a-z]/.test(body.password)||!/[0-9]/.test(body.password)) fail('Choose a password with at least 8 characters, upper and lowercase letters, and a number.');
    const {error}=await auth.auth.updateUser({password:body.password});
    if(error) fail('Could not update password. Please try again.');
    await recordAudit(user.id,'auth.password.updated');
@@ -165,6 +166,50 @@ export async function api(req:NextRequest,parts:string[]) {
    }
    await recordAudit(user.id,'profile.updated');
    return ok(await findProfile(user.id));
+ }
+
+ if(routeIs(parts,'avatar')&&method==='POST') {
+   const {user}=await currentUser();
+   if(Number(req.headers.get('content-length')||0)>3*1024*1024) fail('Photo must be smaller than 2 MB.',413);
+   const form=await req.formData();const file=form.get('avatar');
+   if(!(file instanceof File)||file.size>2*1024*1024) fail('Choose a PNG or JPG photo below 2 MB.');
+   // validateFile checks the actual file signature, not only the supplied extension.
+   const item=await uploadPrivate('avatars',user.id,file);
+   if(!item.mime.startsWith('image/')){await db().storage.from('avatars').remove([item.path]);fail('Only PNG and JPG profile photos are allowed.');}
+   const {data:previous}=await db().from('profiles').select('avatar_url').eq('id',user.id).single();
+   const {error}=await db().from('profiles').update({avatar_url:item.path}).eq('id',user.id);
+   if(error){await db().storage.from('avatars').remove([item.path]);dbError(error);}
+   if(previous?.avatar_url&&previous.avatar_url.startsWith(`${user.id}/`))await db().storage.from('avatars').remove([previous.avatar_url]);
+   await recordAudit(user.id,'profile.avatar_updated');
+   return ok(await findProfile(user.id));
+ }
+ if(routeIs(parts,'avatar')&&method==='DELETE') {
+   const {user}=await currentUser();
+   const {data:previous}=await db().from('profiles').select('avatar_url').eq('id',user.id).single();
+   const {error}=await db().from('profiles').update({avatar_url:null}).eq('id',user.id);dbError(error);
+   if(previous?.avatar_url?.startsWith(`${user.id}/`))await db().storage.from('avatars').remove([previous.avatar_url]);
+   await recordAudit(user.id,'profile.avatar_removed');
+   return ok(await findProfile(user.id));
+ }
+ if(parts[0]==='files'&&parts[1]==='avatar'&&parts.length===3&&method==='GET') {
+   const {user,profile}=await currentUser();const ownerId=idOrFail(parts[2]);
+   if(ownerId!==user.id){
+     if(profile.role==='lgu_admin'&&profile.lgu_status==='approved'){
+       const {data:target}=await db().from('profiles').select('role').eq('id',ownerId).maybeSingle();
+       if(target?.role!=='jobseeker'&&target?.role!=='employer')fail('Not authorized.',403);
+     }else if(profile.role==='employer'&&profile.lgu_status==='approved'){
+       const {data:owned}=await db().from('jobs').select('id').eq('employer_id',user.id);
+       const ids=(owned||[]).map((j:any)=>j.id);
+       if(!ids.length)fail('Not authorized.',403);
+       const {data:app}=await db().from('applications').select('id').eq('seeker_id',ownerId).in('job_id',ids).limit(1);
+       if(!app?.length)fail('Not authorized.',403);
+     }else fail('Not authorized.',403);
+   }
+   const {data:person,error:personError}=await db().from('profiles').select('avatar_url').eq('id',ownerId).maybeSingle();dbError(personError);
+   if(!person?.avatar_url||!person.avatar_url.startsWith(`${ownerId}/`))fail('Photo unavailable.',404);
+   const {data:file,error}=await db().storage.from('avatars').download(person.avatar_url);
+   if(error||!file||!['image/jpeg','image/png'].includes(file.type))fail('Photo unavailable.',404);
+   return new NextResponse(await file.arrayBuffer(),{headers:{'Content-Type':file.type,'Cache-Control':'private, max-age=60','X-Content-Type-Options':'nosniff'}});
  }
 
  if(routeIs(parts,'businesses')&&method==='GET') {
@@ -239,7 +284,7 @@ export async function api(req:NextRequest,parts:string[]) {
 
  if(routeIs(parts,'verification')&&method==='POST') {
    const {user,profile}=await currentUser(['jobseeker','employer']);
-   if(profile.lgu_status==='approved') fail('This account is already LGU-approved.');
+   if(profile.lgu_status==='approved' && q('replace')!=='approved') fail('To replace approved evidence, start a new LGU review request.',409);
    const {data:existing}=await db().from('verification_submissions').select('id').eq('user_id',user.id).eq('status','pending').limit(1);
    if(existing?.length) fail('Your previous documents are already awaiting review.',409);
    if(Number(req.headers.get('content-length')||0)>18*1024*1024)fail('Upload size exceeds the allowed limit.',413);
@@ -249,6 +294,24 @@ export async function api(req:NextRequest,parts:string[]) {
    if(profile.role==='employer' && !(permit instanceof File)) fail('Upload your business permit for LGU verification.');
    const files=profile.role==='employer'?[(permit as File),...supporting]:supporting;
    if(files.length<1||files.length>3) fail('Provide one to three verification documents.');
+   let selectedTypes:string[]=[];
+   try {
+     const raw=form.get('document_types');
+     if(typeof raw==='string') {
+       const parsed=JSON.parse(raw);
+       if(!Array.isArray(parsed) || parsed.length!==supporting.length || parsed.some(item=>typeof item!=='string')) fail('Select a document type for every supporting file.');
+       selectedTypes=parsed;
+     }
+   } catch(error) {if(error instanceof ApiError)throw error;fail('Invalid document classifications.');}
+   const allowedTypes=new Set(['government_id','birth_certificate','resume','certificate','supporting','business_registration','representative_id']);
+   if(selectedTypes.some(type=>!allowedTypes.has(type))) fail('Select a valid document type.');
+   const supportingTypes=selectedTypes.length?selectedTypes:supporting.map((_,index)=>profile.role==='jobseeker'&&index===0?'government_id':'supporting');
+   if(profile.role==='jobseeker'&&!supportingTypes.some(type=>['government_id','birth_certificate'].includes(type)))fail('Include a government ID or birth certificate for identity verification.');
+   if(profile.role==='jobseeker'){
+     const {data:resumeProfile,error:resumeError}=await db().from('seeker_profiles').select('resume_path').eq('user_id',user.id).maybeSingle();
+     dbError(resumeError,'Unable to confirm your resume.');
+     if(!resumeProfile?.resume_path) fail('Upload your resume through the Resume section before LGU verification.');
+   }
    const statement=take(str(form.get('statement')),1200);
    const {data:sub,error:subError}=await db().from('verification_submissions').insert({user_id:user.id,kind:profile.role,statement}).select('id').single();
    dbError(subError,'Could not open a verification request.');
@@ -257,7 +320,7 @@ export async function api(req:NextRequest,parts:string[]) {
      for(const [index,file] of files.entries()){
        const item=await uploadPrivate('verification-documents',user.id,file);
        uploaded.push(item.path);
-       const {error}=await db().from('verification_documents').insert({submission_id:sub!.id,owner_id:user.id,bucket:'verification-documents',path:item.path,filename:item.filename,media_type:item.mime,bytes:item.bytes,document_type:profile.role==='employer' && index===0?'business_permit':'supporting'});
+       const {error}=await db().from('verification_documents').insert({submission_id:sub!.id,owner_id:user.id,bucket:'verification-documents',path:item.path,filename:item.filename,media_type:item.mime,bytes:item.bytes,document_type:profile.role==='employer'&&index===0?'business_permit':supportingTypes[profile.role==='employer'?index-1:index]});
        dbError(error,'Could not save document metadata.');
      }
      const {error:statusError}=await db().from('profiles').update({lgu_status:'pending'}).eq('id',user.id);
@@ -269,6 +332,23 @@ export async function api(req:NextRequest,parts:string[]) {
    }
    await recordAudit(user.id,'verification.submitted',sub!.id);
    return ok({message:'Documents submitted. The LGU will review them.',submission_id:sub!.id},201);
+ }
+
+ if(parts[0]==='verification'&&parts[1]==='documents'&&parts[2]&&method==='DELETE') {
+   const {user}=await currentUser(['jobseeker','employer']);
+   const documentId=idOrFail(parts[2]);
+   const {data:doc,error:docError}=await db().from('verification_documents').select('id,owner_id,submission_id,path,bucket').eq('id',documentId).maybeSingle();
+   dbError(docError,'Unable to load document.');
+   if(!doc||doc.owner_id!==user.id) fail('Document not available.',404);
+   const {data:submission,error:submissionError}=await db().from('verification_submissions').select('id,status').eq('id',doc.submission_id).maybeSingle();
+   dbError(submissionError);
+   if(!submission||submission.status!=='rejected') fail('Only documents from rejected submissions can be removed.',409);
+   const {error:removeError}=await db().from('verification_documents').delete().eq('id',doc.id).eq('owner_id',user.id);
+   dbError(removeError,'Could not remove document record.');
+   const {error:fileError}=await db().storage.from('verification-documents').remove([doc.path]);
+   if(fileError) console.error('[Private document cleanup]',fileError.message);
+   await recordAudit(user.id,'verification.document_removed',documentId);
+   return ok({message:'Document removed.'});
  }
 
  if(routeIs(parts,'resume')&&method==='POST') {
@@ -288,6 +368,28 @@ export async function api(req:NextRequest,parts:string[]) {
    return ok({path:item.path,message:'Resume uploaded securely.'});
  }
 
+ if(routeIs(parts,'resume')&&method==='DELETE') {
+   await currentUser(['jobseeker']);
+   fail('LGU approval is required. Use Request Resume Removal instead.',409);
+ }
+ if(routeIs(parts,'resume','removal-request')&&method==='POST') {
+   const {user}=await currentUser(['jobseeker']);
+   const {data:current,error:lookupError}=await db().from('seeker_profiles').select('resume_path').eq('user_id',user.id).maybeSingle();
+   dbError(lookupError);
+   if(!current?.resume_path)fail('There is no resume to remove.');
+   const body=await readJson(req);const reason=take(str(body.reason),800);
+   if(reason.length<8)fail('Provide a short reason for LGU review.');
+   const {data:pending}=await db().from('resume_removal_requests').select('id').eq('seeker_id',user.id).eq('status','pending').limit(1);
+   if(pending?.length)fail('Your resume-removal request is already awaiting LGU review.',409);
+   const {error}=await db().from('resume_removal_requests').insert({seeker_id:user.id,resume_path:current.resume_path,reason});dbError(error,'Unable to submit the request.');
+   await recordAudit(user.id,'resume.removal_requested');
+   return ok({message:'Resume removal sent to LGU for approval.'});
+ }
+ if(routeIs(parts,'resume','removal-request')&&method==='GET') {
+   const {user}=await currentUser(['jobseeker']);
+   const {data,error}=await db().from('resume_removal_requests').select('id,status,created_at,reviewed_at,decision_note').eq('seeker_id',user.id).order('created_at',{ascending:false}).limit(5);
+   dbError(error);return ok(data||[]);
+ }
  if(parts[0]==='files'&&parts[1]==='document'&&parts[2]&&method==='GET') {
    const {user,profile}=await currentUser();
    const {data:doc,error}=await db().from('verification_documents').select('*').eq('id',idOrFail(parts[2])).maybeSingle();
@@ -296,7 +398,7 @@ export async function api(req:NextRequest,parts:string[]) {
    if(doc.owner_id!==user.id && !(profile.role==='lgu_admin' && profile.lgu_status==='approved')) fail('Not authorized.',403);
    const {data,error:storageError}=await db().storage.from('verification-documents').download(doc.path);
    if(storageError||!data) fail('Document could not be downloaded.',404);
-   return new NextResponse(await data.arrayBuffer(),{headers:{'Content-Type':doc.media_type,'Content-Disposition':`inline; filename="document-${doc.id}.${doc.media_type==='application/pdf'?'pdf':doc.media_type==='image/png'?'png':'jpg'}"`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+   return new NextResponse(await data.arrayBuffer(),{headers:{'Content-Type':doc.media_type,'Content-Disposition':`${q('download')==='1'?'attachment':'inline'}; filename="document-${doc.id}.${doc.media_type==='application/pdf'?'pdf':doc.media_type==='image/png'?'png':'jpg'}"`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
  }
 
  if(routeIs(parts,'files','resume')&&method==='GET') {
@@ -348,12 +450,12 @@ export async function api(req:NextRequest,parts:string[]) {
    const {user}=await currentUser(['jobseeker']);
    const body=await readJson(req);
    const jobId=idOrFail(body.job_id);
-   const {data:job}=await db().from('jobs').select('id').eq('id',jobId).eq('status','published').maybeSingle();
-   if(!job) fail('Job unavailable.',404);
    if(body.remove===true){
      const {error}=await db().from('saved_jobs').delete().eq('user_id',user.id).eq('job_id',jobId);dbError(error);
      return ok({saved:false});
    }
+   const {data:job}=await db().from('jobs').select('id').eq('id',jobId).eq('status','published').maybeSingle();
+   if(!job) fail('This listing is no longer accepting saved jobs.',404);
    const {error}=await db().from('saved_jobs').upsert({user_id:user.id,job_id:jobId},{onConflict:'user_id,job_id'});
    dbError(error);
    return ok({saved:true});
@@ -391,6 +493,8 @@ export async function api(req:NextRequest,parts:string[]) {
    if(!['applied','reviewing'].includes(app.status)) fail('This application can no longer be withdrawn.');
    const {error}=await db().from('applications').update({status:'withdrawn'}).eq('id',id);dbError(error);
    await db().from('application_events').insert({application_id:id,actor_id:user.id,status:'withdrawn',note:'Withdrawn by applicant'});
+   const {data:job}=await db().from('jobs').select('employer_id,title').eq('id',app.job_id).maybeSingle();
+   if(job?.employer_id) await notify(job.employer_id,'application','Application withdrawn',`An applicant withdrew from ${job.title}.`,'/app?tab=candidates');
    await recordAudit(user.id,'application.withdrawn',id);
    return ok({message:'Application withdrawn.'});
  }
@@ -439,16 +543,123 @@ export async function api(req:NextRequest,parts:string[]) {
    await currentUser(['lgu_admin'],true);
    const [verifications,jobs]=await Promise.all([
      db().from('verification_submissions').select('id,user_id,kind,status,statement,created_at,profiles!verification_submissions_user_id_fkey(id,full_name,email,role,city,province,barangay),verification_documents(id,filename,document_type,media_type,bytes)').eq('status','pending').order('created_at',{ascending:true}).limit(100),
-     db().from('jobs').select('id,title,company_name,category,location,barangay,employment_type,created_at,description,requirements,employer_id').eq('status','pending').order('created_at',{ascending:true}).limit(100)
+     db().from('jobs').select('id,title,company_name,category,location,barangay,employment_type,work_setup,experience_level,description,requirements,benefits,salary_min,salary_max,salary_visible,deadline,vacancies,screening_questions,created_at,employer_id').eq('status','pending').order('created_at',{ascending:true}).limit(100)
    ]);
    dbError(verifications.error);
    dbError(jobs.error);
    return ok({verifications:verifications.data||[],jobs:jobs.data||[]});
  }
 
+ if(routeIs(parts,'lgu','review-history')&&method==='GET') {
+   await currentUser(['lgu_admin'],true);
+   const {data,error}=await db().from('verification_submissions')
+     .select('id,user_id,kind,status,created_at,reviewed_at,reviewed_by,reviewer_note,profiles!verification_submissions_user_id_fkey(full_name,barangay,role)')
+     .order('created_at',{ascending:false}).limit(200);
+   dbError(error,'Unable to load LGU verification history.');
+   return ok(data||[]);
+ }
+
+ if(routeIs(parts,'lgu','all-jobs')&&method==='GET') {
+   await currentUser(['lgu_admin','sys_admin'],true);
+   const {data,error}=await db().from('jobs').select('id,title,company_name,category,barangay,location,status,created_at,published_at,review_note,reviewed_by,employer_id,employment_type').order('created_at',{ascending:false}).limit(250);
+   dbError(error,'Unable to load Olongapo job postings.');
+   return ok(data||[]);
+ }
+
+ if(routeIs(parts,'lgu','jobseekers')&&method==='GET') {
+   await currentUser(['lgu_admin'],true);
+   const {data,error}=await db().from('profiles')
+     .select('id,full_name,email,phone,barangay,address_line,bio,avatar_url,lgu_status,created_at,seeker_profiles(education,experience_years,skills,desired_role,preferred_work_setup),verification_submissions!verification_submissions_user_id_fkey(id,status,created_at,reviewed_at,reviewer_note)')
+     .eq('role','jobseeker').order('created_at',{ascending:false}).limit(300);
+   dbError(error,'Unable to load jobseekers.');
+   const ids=(data||[]).map((p:any)=>p.id);
+   const counts=new Map<string,number>();
+   if(ids.length){const {data:applications,error:appsError}=await db().from('applications').select('seeker_id').in('seeker_id',ids).limit(4000);dbError(appsError);(applications||[]).forEach((a:any)=>counts.set(a.seeker_id,(counts.get(a.seeker_id)||0)+1));}
+   return ok((data||[]).map((p:any)=>({...p,application_count:counts.get(p.id)||0})));
+ }
+ if(routeIs(parts,'lgu','jobseekers','status')&&method==='POST') {
+   const {user}=await currentUser(['lgu_admin'],true);const body=await readJson(req);
+   const id=idOrFail(str(body.id));const action=str(body.action);const reason=take(str(body.reason),800);
+   if(!['suspend','restore'].includes(action))fail('Invalid account action.');
+   if(reason.length<10)fail('Provide a reason of at least 10 characters.');
+   const {data:target,error:targetError}=await db().from('profiles').select('id,role,lgu_status').eq('id',id).maybeSingle();dbError(targetError);
+   if(!target||target.role!=='jobseeker')fail('Only jobseeker accounts can be managed here.',403);
+   if(action==='suspend'&&target.lgu_status==='suspended')fail('The account is already suspended.',409);
+   if(action==='restore'&&target.lgu_status!=='suspended')fail('The account is not suspended.',409);
+   // Restoring requires renewed LGU verification; never silently re-approve an account.
+   const next=action==='suspend'?'suspended':'pending';
+   const {data:updated,error}=await db().from('profiles').update({lgu_status:next,suspended_from:action==='suspend'?target.lgu_status:null}).eq('id',id).eq('role','jobseeker').eq('lgu_status',target.lgu_status).select('id').maybeSingle();
+   dbError(error);if(!updated)fail('Account status changed. Refresh before retrying.',409);
+   await recordAudit(user.id,`lgu.jobseeker.${action}`,id,{reason,previous_status:target.lgu_status});
+   await notify(id,'verification',action==='suspend'?'LGU account suspended':'LGU account restored',`${reason} ${action==='restore'?'Complete LGU verification again.':''}`,'/app?tab=verification');
+   return ok({status:next,message:action==='suspend'?'Jobseeker account suspended.':'Account restored to pending verification.'});
+ }
+ if(routeIs(parts,'lgu','close-job')&&method==='POST') {
+   const {user}=await currentUser(['lgu_admin'],true);const body=await readJson(req);
+   const id=idOrFail(str(body.id));const note=take(str(body.reason),1000);
+   if(note.length<10)fail('Provide a reason of at least 10 characters.');
+   const {data:job,error:lookupError}=await db().from('jobs').select('id,title,status,employer_id').eq('id',id).maybeSingle();dbError(lookupError);
+   if(!job||!['pending','published'].includes(job.status))fail('Only pending or published jobs can be cancelled.',409);
+   const {data:updated,error}=await db().from('jobs').update({status:'closed',review_note:note,reviewed_by:user.id}).eq('id',id).eq('status',job.status).select('id').maybeSingle();dbError(error);
+   if(!updated)fail('Job status changed. Refresh the list.',409);
+   await recordAudit(user.id,'lgu.job.cancelled',id,{reason:note,previous_status:job.status});
+   await notify(job.employer_id,'job_review','Job listing cancelled by LGU',`${job.title}: ${note}`,'/app?tab=jobs');
+   return ok({message:'Job listing cancelled and employer notified.'});
+ }
+ if(routeIs(parts,'lgu','resume-removals')&&method==='GET') {
+   await currentUser(['lgu_admin'],true);
+   const {data,error}=await db().from('resume_removal_requests').select('id,seeker_id,resume_path,reason,status,created_at,reviewed_at,decision_note,profiles!resume_removal_requests_seeker_id_fkey(full_name,email,barangay)').eq('status','pending').order('created_at',{ascending:true}).limit(150);
+   dbError(error);return ok(data||[]);
+ }
+ if(routeIs(parts,'lgu','resume-removals')&&method==='POST') {
+   const {user}=await currentUser(['lgu_admin'],true);const body=await readJson(req);
+   const id=idOrFail(str(body.id));const decision=str(body.decision);const note=take(str(body.note),1000);
+   if(!['approved','rejected'].includes(decision))fail('Invalid decision.');
+   if(note.length<8)fail('Enter an LGU review reason of at least 8 characters.');
+   const {data:entry,error:entryError}=await db().from('resume_removal_requests').select('*').eq('id',id).maybeSingle();dbError(entryError);
+   if(!entry||entry.status!=='pending')fail('Request is no longer pending.',409);
+   const {data:resume,error:resumeError}=await db().from('seeker_profiles').select('resume_path').eq('user_id',entry.seeker_id).maybeSingle();dbError(resumeError);
+   if(decision==='approved'&&resume?.resume_path!==entry.resume_path)fail('The applicant has replaced this resume. Ask for a new removal request.',409);
+   const {error}=await db().rpc('review_resume_removal',{p_actor:user.id,p_request:id,p_decision:decision,p_note:note});dbError(error,'Unable to complete the LGU resume review.');
+   if(decision==='approved'){
+     const {count}=await db().from('applications').select('id',{head:true,count:'exact'}).eq('resume_path',entry.resume_path);
+     if(!count)await db().storage.from('resumes').remove([entry.resume_path]);
+   }
+   await recordAudit(user.id,`lgu.resume_removal.${decision}`,entry.seeker_id,{request_id:id,note});
+   await notify(entry.seeker_id,'verification',`Resume removal ${decision}`,`${note}${decision==='approved'?' Upload a new resume and complete LGU review before using restricted features.':''}`,'/app?tab=verification');
+   return ok({message:`Resume removal ${decision}.`});
+ }
+
+ if(routeIs(parts,'lgu','application-tracking')&&method==='GET') {
+   await currentUser(['lgu_admin'],true);
+   const {data,error}=await db().from('applications').select('id,job_id,seeker_id,status,created_at,updated_at,jobs(id,title,company_name,barangay),application_events(status,created_at)').order('created_at',{ascending:false}).limit(200);
+   dbError(error,'Unable to load application tracking.');
+   const ids=[...new Set((data||[]).map((row:any)=>row.seeker_id))];
+   let profiles:any[]=[];
+   if(ids.length){
+     const {data:matched,error:profileError}=await db().from('profiles').select('id,full_name,barangay,lgu_status').in('id',ids);
+     dbError(profileError,'Unable to load applicants.');profiles=matched||[];
+   }
+   const byId=new Map(profiles.map((profile:any)=>[profile.id,profile]));
+   return ok((data||[]).map((row:any)=>({ ...row, applicant:byId.get(row.seeker_id)||null })));
+ }
+
  if(routeIs(parts,'lgu','review-verification')&&method==='POST') {
    const {user}=await currentUser(['lgu_admin'],true);
    const body=parse(decisionSchema,await readJson(req));
+   if(body.decision==='approved') {
+     const {data:submission,error:submissionError}=await db().from('verification_submissions').select('id,user_id,kind,status,verification_documents(document_type)').eq('id',body.id).maybeSingle();
+     dbError(submissionError,'Unable to check verification evidence.');
+     if(!submission||submission.status!=='pending') fail('This review request is unavailable.',409);
+     const types=(submission.verification_documents||[]).map((doc:any)=>doc.document_type);
+     if(submission.kind==='jobseeker') {
+       if(!types.some((type:string)=>['government_id','birth_certificate'].includes(type))) fail('An identity document is required before LGU approval.');
+       const {data:resume,error:resumeError}=await db().from('seeker_profiles').select('resume_path').eq('user_id',submission.user_id).maybeSingle();
+       dbError(resumeError,'Unable to confirm resume.');
+       if(!resume?.resume_path) fail('A saved resume is required before jobseeker approval.');
+     }
+     if(submission.kind==='employer'&&!types.includes('business_permit')) fail('The business permit must be submitted before approval.');
+   }
    const {data,error}=await db().rpc('review_verification',{p_actor:user.id,p_submission:body.id,p_decision:body.decision,p_note:body.note||''});
    dbError(error,'Unable to complete LGU review.');
    if(data?.user_id) await emailPerson(data.user_id,'JobLinkLocal verification update',data.decision==='approved'?'Your credentials have been approved by the LGU.':`Your credential review needs changes. ${body.note||''}`,'lgu_verification');
@@ -503,6 +714,67 @@ export async function api(req:NextRequest,parts:string[]) {
    return ok({message:'Notification marked as read.'});
  }
 
+ if(routeIs(parts,'ai','explain')&&method==='POST') {
+   const {user,profile}=await currentUser();
+   await checkLimit(req,`ai_explain_${user.id}`,8,3600);
+   const key=process.env.OPENAI_API_KEY;
+   if(!key)fail('AI summaries are not configured. Built-in skill matching and analytics are still available.',503);
+   let metrics:Record<string,number>={};
+   // Transmit only role-level counts, no names, identities, resumes, addresses, or credentials.
+   if(profile.role==='jobseeker'){
+     const {count:jobs}=await db().from('jobs').select('id',{head:true,count:'exact'}).eq('status','published');
+     const {count:apps}=await db().from('applications').select('id',{head:true,count:'exact'}).eq('seeker_id',user.id);
+     metrics={available_jobs:jobs||0,submitted_applications:apps||0};
+   }else if(profile.role==='employer'){
+     const {data:jobs}=await db().from('jobs').select('id').eq('employer_id',user.id);
+     const ids=(jobs||[]).map((j:any)=>j.id);
+     const {count:apps}=ids.length?await db().from('applications').select('id',{head:true,count:'exact'}).in('job_id',ids):{count:0};
+     metrics={own_job_posts:ids.length,submitted_applications:apps||0};
+   }else if(profile.role==='lgu_admin'){
+     const {count:verifications}=await db().from('verification_submissions').select('id',{head:true,count:'exact'}).eq('status','pending');
+     const {count:jobs}=await db().from('jobs').select('id',{head:true,count:'exact'}).eq('status','pending');
+     metrics={pending_verifications:verifications||0,pending_job_reviews:jobs||0};
+   }else{
+     const {count:accounts}=await db().from('profiles').select('id',{head:true,count:'exact'});
+     const {count:apps}=await db().from('applications').select('id',{head:true,count:'exact'});
+     metrics={total_accounts:accounts||0,total_applications:apps||0};
+   }
+   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);
+   try{
+     const result=await fetch('https://api.openai.com/v1/responses',{method:'POST',signal:controller.signal,headers:{'Authorization':`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_MODEL||'gpt-5-mini',store:false,max_output_tokens:180,instructions:'You analyze aggregated metrics for an Olongapo employment application. Respond with two short factual sentences in clear English. Use ONLY the supplied counts, do not invent trends or qualifications. Never recommend automated acceptance, rejection, account suspension, or hiring. Do not infer protected traits or individual competence.',input:JSON.stringify({role:profile.role,metrics})})});
+     if(!result.ok)fail('AI summary service unavailable. Use the built-in insights instead.',503);
+     const data=await result.json();
+     const answer=(data.output||[]).flatMap((item:any)=>item.content||[]).filter((part:any)=>part.type==='output_text').map((part:any)=>part.text).join(' ').trim();
+     if(!answer)fail('The AI summary could not be completed.',503);
+     await recordAudit(user.id,'ai.summary_generated',undefined,{role:profile.role});
+     return ok({text:answer.slice(0,1000),method:'External AI summary of aggregated counts',metrics});
+   }catch(error){if(error instanceof ApiError)throw error;fail('AI summary is temporarily unavailable.',503);}finally{clearTimeout(timer);}
+ }
+ if(routeIs(parts,'ai','insights')&&method==='GET') {
+   const {user,profile}=await currentUser();
+   if(profile.role==='jobseeker'){
+     const {data:seeker,error:seekerError}=await db().from('seeker_profiles').select('skills,desired_role').eq('user_id',user.id).maybeSingle();dbError(seekerError);
+     const {data:jobs,error}=await db().from('jobs').select('id,title,company_name,requirements,description,category').eq('status','published').order('published_at',{ascending:false}).limit(60);dbError(error);
+     const matches=(jobs||[]).map((job:any)=>({...matchJobSkills(normalizeSkills(seeker?.skills),job.requirements,job.title),job:{id:job.id,title:job.title,company_name:job.company_name}}));
+     return ok({role:profile.role,method:'Keyword-based skill overlap (not a trained AI model)',items:matches.filter(item=>item.required.length).sort((a,b)=>b.matched.length-a.matched.length).slice(0,5),info:'Suggestions use profile skills and published job requirements. Matching does not determine eligibility.'});
+   }
+   if(profile.role==='employer'){
+     const {data:jobs,error}=await db().from('jobs').select('id').eq('employer_id',user.id);dbError(error);
+     const ids=(jobs||[]).map((job:any)=>job.id);
+     const {count}=ids.length?await db().from('applications').select('id',{head:true,count:'exact'}).in('job_id',ids):{count:0};
+     return ok({role:profile.role,method:'Descriptive workflow insights',items:[{title:'Submitted applications',value:count||0},{title:'Your job postings',value:ids.length}],info:'Open Candidate Pipeline to see transparent skill overlaps. Matching does not make hiring decisions.'});
+   }
+   if(profile.role==='lgu_admin'){
+     const {count:pending}=await db().from('verification_submissions').select('id',{head:true,count:'exact'}).eq('status','pending');
+     const {count:jobs}=await db().from('jobs').select('id',{head:true,count:'exact'}).eq('status','pending');
+     const {count:removals}=await db().from('resume_removal_requests').select('id',{head:true,count:'exact'}).eq('status','pending');
+     return ok({role:profile.role,method:'Queue monitoring',items:[{title:'People pending review',value:pending||0},{title:'Jobs pending approval',value:jobs||0},{title:'Resume removal requests',value:removals||0}],info:'Counts come from live records. LGU staff review every case manually.'});
+   }
+   const {count:accounts}=await db().from('profiles').select('id',{head:true,count:'exact'});
+   const {count:applications}=await db().from('applications').select('id',{head:true,count:'exact'});
+   return ok({role:profile.role,method:'Platform activity summary',items:[{title:'Registered accounts',value:accounts||0},{title:'Applications',value:applications||0}],info:'Open Reports & Insights for transparent time-series analytics and forecasts.'});
+ }
+
  if(routeIs(parts,'dashboard')&&method==='GET') {
    const {user,profile}=await currentUser();
    let stats:Record<string,number>={};
@@ -522,11 +794,13 @@ export async function api(req:NextRequest,parts:string[]) {
      const {data:owned}=await db().from('jobs').select('id').eq('employer_id',user.id);
      const ids=(owned||[]).map((j:any)=>j.id);
      const {count:appCount}=ids.length?await db().from('applications').select('id',{count:'exact',head:true}).in('job_id',ids):{count:0};
-     stats={jobs:ids.length,applicants:appCount||0,published:(await db().from('jobs').select('id',{count:'exact',head:true}).eq('employer_id',user.id).eq('status','published')).count||0};
+     stats={jobseekers:await count('profiles','role','jobseeker'),jobs:ids.length,applicants:appCount||0,published:(await db().from('jobs').select('id',{count:'exact',head:true}).eq('employer_id',user.id).eq('status','published')).count||0};
    }
-   if(profile.role==='lgu_admin'||profile.role==='sys_admin') {
+   if(profile.role==='lgu_admin') {
+     stats={pending_reviews:await count('verification_submissions','status','pending'),jobseekers:await count('profiles','role','jobseeker'),jobs:await count('jobs'),applications:await count('applications')};
+   }
+   if(profile.role==='sys_admin') {
      stats={users:await count('profiles'),jobs:await count('jobs'),applications:await count('applications'),hires:await count('employment_records')};
-     if(profile.role==='lgu_admin') stats.pending_reviews=await count('verification_submissions','status','pending');
    }
    const {count:unread}=await db().from('notifications').select('id',{count:'exact',head:true}).eq('user_id',user.id).is('read_at',null);
    return ok({stats,unread:unread||0,profile:{id:profile.id,full_name:profile.full_name,role:profile.role,lgu_status:profile.lgu_status}});
@@ -534,7 +808,7 @@ export async function api(req:NextRequest,parts:string[]) {
 
  if(routeIs(parts,'reports')&&method==='GET') {
    await currentUser(['lgu_admin','sys_admin'],true);
-   const data=await reportData(q('start'),q('end'));
+   const data=await reportData(q('start'),q('end'),q('period'));
    if(q('format')==='csv')return new NextResponse(csvReport(data),{headers:{'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename="joblinklocal-report.csv"','Cache-Control':'private, no-store'}});
    if(q('format')==='pdf')return new NextResponse(Uint8Array.from(await pdfReport(data)).buffer as ArrayBuffer,{headers:{'Content-Type':'application/pdf','Content-Disposition':'attachment; filename="joblinklocal-report.pdf"','Cache-Control':'private, no-store'}});
    return ok(data);

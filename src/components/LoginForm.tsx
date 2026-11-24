@@ -14,7 +14,7 @@ const portals:{id:Portal;label:string;description:string;icon:typeof UserRound}[
  {id:'admin',label:'Administration',description:'LGU and system administration',icon:ShieldCheck}
 ];
 
-export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker'}:{invalidConfirmation?:boolean;initialPortal?:Portal}){
+export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker',returnJobId}:{invalidConfirmation?:boolean;initialPortal?:Portal;returnJobId?:string}){
  const [email,setEmail]=useState('');
  const [password,setPassword]=useState('');
  const [visible,setVisible]=useState(false);
@@ -42,7 +42,7 @@ export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker'}:
   try{
    await request('auth/login','POST',{email,password,portal});
    toast.show('You are signed in.','success',portal==='admin'?'Opening your administration workspace.':'Your workspace is ready.');
-   router.replace('/app');
+   router.replace(returnJobId&&portal==='jobseeker'?`/app?tab=discover&job=${encodeURIComponent(returnJobId)}`:'/app');
    router.refresh();
   }catch(error){
    const message=error instanceof Error?error.message:'Sign in failed.';
@@ -51,7 +51,7 @@ export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker'}:
   }
   finally{setBusy(false);}
  };
- return <AuthLayout eyebrow="SIGN IN / YOUR WORKSPACE" title="Welcome back." subtitle="Choose where you work, then securely access your account.">
+ return <AuthLayout eyebrow="SIGN IN" title="Sign in" subtitle="Select your account type and enter your credentials.">
   <div className="portal-select" role="group" aria-label="Choose your sign-in area">
    {portals.map(item=>{
     const Icon=item.icon;

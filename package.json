@@ -7,10 +7,12 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "admin:create": "node --env-file=.env.local scripts/bootstrap-admin.mjs"
+    "admin:create": "node --env-file=.env.local scripts/bootstrap-admin.mjs",
+    "audit:source": "node scripts/check-source.cjs",
+    "test:logic": "node scripts/test-logic.cjs"
   },
   "engines": {
-    "node": "22.x || 26.x"
+    "node": "22.x"
   },
   "dependencies": {
     "next": "^16.4.6",

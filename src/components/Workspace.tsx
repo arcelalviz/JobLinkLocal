@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import { Compass, Grid2X2, Bookmark, BriefcaseBusiness, Users, ShieldCheck, ClipboardCheck, BarChart3, Bell, UserRound, LogOut, Menu, X, ArrowUpRight, Activity, FileCheck2, Settings2, ScrollText } from 'lucide-react';
 import { request } from '@/lib/http';
@@ -12,6 +12,10 @@ import { EmployerPanels } from '@/components/EmployerPanels';
 import { AdminPanels } from '@/components/AdminPanels';
 import { AccountPanels } from '@/components/AccountPanels';
 import { BrandMark } from '@/components/BrandMark';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { createBrowserClient } from '@supabase/ssr';
+import { ManilaClock } from '@/components/ManilaClock';
+import { RoleAIInsights } from '@/components/RoleAIInsights';
 
 const tabDefinitions=[
  {id:'overview',label:'Overview',icon:Grid2X2,roles:['jobseeker','employer','lgu_admin','sys_admin']},
@@ -22,6 +26,11 @@ const tabDefinitions=[
  {id:'candidates',label:'Candidate pipeline',icon:Users,roles:['employer']},
  {id:'reviews',label:'Verify people',icon:ShieldCheck,roles:['lgu_admin']},
  {id:'postings',label:'Approve jobs',icon:ClipboardCheck,roles:['lgu_admin']},
+ {id:'review-history',label:'Verification history',icon:ClipboardCheck,roles:['lgu_admin']},
+ {id:'all-jobs',label:'View all jobs',icon:BriefcaseBusiness,roles:['lgu_admin','sys_admin']},
+ {id:'jobseekers',label:'View all jobseekers',icon:Users,roles:['lgu_admin']},
+ {id:'resume-removals',label:'Resume removal requests',icon:FileCheck2,roles:['lgu_admin']},
+ {id:'tracking',label:'Application tracking',icon:Activity,roles:['lgu_admin']},
  {id:'users',label:'Account control',icon:Settings2,roles:['sys_admin']},
  {id:'audit',label:'Activity log',icon:ScrollText,roles:['sys_admin']},
  {id:'reports',label:'Reports & insights',icon:BarChart3,roles:['lgu_admin','sys_admin']},
@@ -30,15 +39,18 @@ const tabDefinitions=[
  {id:'notifications',label:'Notifications',icon:Bell,roles:['jobseeker','employer','lgu_admin','sys_admin']}
 ];
 
-const roleNames:Record<Role,string>={jobseeker:'Career dashboard',employer:'Recruitment dashboard',lgu_admin:'LGU administration',sys_admin:'System administration'};
+const roleNames:Record<Role,string>={jobseeker:'Jobseeker',employer:'Employer',lgu_admin:'LGU Admin',sys_admin:'System Admin'};
 
 export function Workspace(){
  const router=useRouter();
+ const searchParams=useSearchParams();
  const toast=useToast();
  const [me,setMe]=useState<Profile|null>(null);
  const [loading,setLoading]=useState(true);
  const [tab,setTab]=useState('overview');
  const [menu,setMenu]=useState(false);
+ const [accountMenu,setAccountMenu]=useState(false);
+ const [confirmLogout,setConfirmLogout]=useState(false);
  const [refresh,setRefresh]=useState(0);
  const [unread,setUnread]=useState(0);
  const seenNotifications=useRef<Set<string>|null>(null);
@@ -53,8 +65,8 @@ export function Workspace(){
  useEffect(()=>{
    if(!me)return;
    let active=true;
-   const poll=()=>request<any>('dashboard').then(v=>{if(active)setUnread(v.unread||0);}).catch(()=>{});
-   poll();const interval=setInterval(poll,60000);
+   const poll=()=>request<any>('dashboard').then(v=>{if(active){setUnread(v.unread||0);if(v.profile?.lgu_status)setMe(current=>current&&current.lgu_status!==v.profile.lgu_status?{...current,lgu_status:v.profile.lgu_status}:current);}}).catch(()=>{});
+   poll();const interval=setInterval(poll,15000);
    return ()=>{active=false;clearInterval(interval);};
  },[me,refresh]);
  useEffect(()=>{
@@ -73,10 +85,26 @@ export function Workspace(){
        seenNotifications.current=new Set(incoming.map(item=>item.id));
      }catch{}
    };
-   check();const interval=setInterval(check,30000);
+   check();const interval=setInterval(check,15000);
    return ()=>{active=false;clearInterval(interval);};
  },[me,toast]);
+ useEffect(() => {
+   if (!me || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) return;
+   const browser = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+   const channel = browser.channel(`private-notifications-${me.id}`)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${me.id}` }, payload => {
+      const incoming = payload.new as { id?: string; title?: string; body?: string };
+      if (!incoming.id) return;
+      if (seenNotifications.current?.has(incoming.id)) return;
+      seenNotifications.current?.add(incoming.id);
+      setUnread(count => count + 1);
+      toast.show(incoming.title || 'New update', 'info', incoming.body || 'Check your notifications.');
+    }).subscribe();
+   return () => { void browser.removeChannel(channel); };
+ }, [me, toast]);
  const navigate=(id:string)=>{setTab(id);setMenu(false);if(window.location.search!==`?tab=${encodeURIComponent(id)}`)window.history.pushState(null,'',`/app?tab=${encodeURIComponent(id)}`);};
+ // Next.js Link navigation, native history updates, and browser Back/Forward all sync the active panel.
+ useEffect(()=>{const requested=searchParams.get('tab')||'overview';setTab(previous=>previous===requested?previous:requested);setMenu(false);},[searchParams]);
  useEffect(()=>{const handleBack=()=>{const value=new URLSearchParams(window.location.search).get('tab')||'overview';setTab(value);setMenu(false);};window.addEventListener('popstate',handleBack);return ()=>window.removeEventListener('popstate',handleBack);},[]);
  const logout=async()=>{
    try{await request('auth/logout','POST');toast.show('Signed out.','success');router.replace('/');router.refresh();}
@@ -85,10 +113,9 @@ export function Workspace(){
  const role=me?.role;
  const tabs=useMemo(()=>tabDefinitions.filter(i=>role&&i.roles.includes(role)),[role]);
  useEffect(()=>{if(role&&!tabs.some(t=>t.id===tab))navigate('overview');},[role,tabs,tab]);
- if(loading)return <div className="workspace-loading"><div className="loader-logo"><BriefcaseBusiness size={48}/></div><span>Loading your workspace…</span></div>;
+ if(loading)return <div className="workspace-loading" role="status" aria-live="polite"><div className="loader-logo"><BriefcaseBusiness size={48}/></div><span>Loading your workspace…</span></div>;
  if(!me)return null;
  const active=tabs.find(t=>t.id===tab);
- const greeting=me.role==='employer'?'Review candidates and manage your openings.':me.role==='lgu_admin'?'Review and approve local opportunities.':me.role==='sys_admin'?'Monitor accounts and platform activity.':'Explore opportunities and track your applications.';
  const date=new Intl.DateTimeFormat('en-PH',{dateStyle:'full',timeZone:'Asia/Manila'}).format(new Date());
  return <div className={`workspace role-${me.role}`}>
   {menu&&<div className="mobile-menu-shade" onClick={()=>setMenu(false)}/>}
@@ -96,41 +123,46 @@ export function Workspace(){
    <div className="side-logo"><Link href="/" className="brand"><span className="brand-icon"><BrandMark size={34}/></span><span>joblink<span className="brand-soft">local</span></span></Link><button className="mobile-side-close" onClick={()=>setMenu(false)}><X size={20}/></button></div>
    <div className="side-identity"><span className="workspace-bullet"/> <span>WORKSPACE / {roleNames[me.role].toUpperCase()}</span></div>
    <nav className="side-navigation" aria-label="Workspace navigation">
-    <div className="side-group-label">YOUR WORKSPACE</div>
+    <div className="side-group-label">NAVIGATION</div>
     {tabs.filter(t=>!['profile','verification','notifications'].includes(t.id)).map(t=><button key={t.id} className={`side-link ${tab===t.id?'selected':''}`} aria-current={tab===t.id?'page':undefined} onClick={()=>navigate(t.id)}><t.icon size={19}/><span>{t.label}</span>{t.id==='reports'&&<ArrowUpRight size={14} className="side-trail"/>}</button>)}
-    <div className="side-group-label side-group-second">ACCOUNT & SUPPORT</div>
+    <div className="side-group-label side-group-second">ACCOUNT</div>
     {tabs.filter(t=>['profile','verification','notifications'].includes(t.id)).map(t=><button key={t.id} className={`side-link ${tab===t.id?'selected':''}`} aria-current={tab===t.id?'page':undefined} onClick={()=>navigate(t.id)}><t.icon size={19}/><span>{t.label}</span>{t.id==='notifications'&&unread>0&&<span className="notification-counter">{unread}</span>}</button>)}
    </nav>
-   <div className="sidebar-bottom"><div className="side-message"><Compass size={22}/><p>Account access secured.<br/><strong>LGU-reviewed workflows.</strong></p><span>PROFESSIONAL EMPLOYMENT PLATFORM</span></div><button className="side-logout" onClick={logout}><LogOut size={18}/> Sign out <ArrowUpRight size={16}/></button></div>
+   
   </aside>
   <div className="workspace-main">
-   <header className="workspace-topbar"><button className="mobile-menu-button" onClick={()=>setMenu(true)} aria-label="Open navigation"><Menu size={22}/></button><span className="breadcrumb">WORKSPACE <span>/</span> {active?.label.toUpperCase()}</span><div className="topbar-right"><span className="topbar-date">{date}</span><button className="notification-trigger" onClick={()=>navigate('notifications')} aria-label="Notifications"><Bell size={20}/>{unread>0&&<span className="notification-indicator"/>}</button><button className="profile-avatar" onClick={()=>navigate('profile')}>{me.full_name.slice(0,1).toUpperCase()}</button></div></header>
+   <header className="workspace-topbar"><button className="mobile-menu-button" onClick={()=>setMenu(true)} aria-label="Open navigation"><Menu size={22}/></button><span className="breadcrumb">WORKSPACE</span><div className="topbar-right"><span className="topbar-date">{date}</span><ManilaClock/><div className="jl-theme-in-header"><ThemeToggle/></div><button className="notification-trigger" onClick={()=>navigate('notifications')} aria-label="Notifications"><Bell size={20}/>{unread>0&&<span className="notification-indicator"/>}</button><div className="jl-topbar-account"><button type="button" className="profile-avatar" onClick={()=>{setAccountMenu(v=>!v);setConfirmLogout(false);}} aria-label="Account menu" aria-expanded={accountMenu}>{me.avatar_url?<img src={`/api/files/avatar/${me.id}?v=${encodeURIComponent(me.avatar_url)}`} alt=""/>:me.full_name.slice(0,1).toUpperCase()}</button>{accountMenu&&<div className="jl-account-popover"><strong>{me.full_name}</strong><small>{roleNames[me.role]}</small><button type="button" onClick={()=>{navigate('profile');setAccountMenu(false);}}><UserRound size={16}/> My profile</button>{confirmLogout?<div className="jl-signout-confirm"><p>Are you sure you want to sign out?</p><div><button type="button" onClick={()=>setConfirmLogout(false)}>Cancel</button><button type="button" onClick={()=>{setAccountMenu(false);setConfirmLogout(false);void logout();}}>Sign out</button></div></div>:<button type="button" onClick={()=>setConfirmLogout(true)}><LogOut size={16}/> Sign out</button>}</div>}</div></div></header>
    <div className="workspace-content"><AnimatePresence mode="wait"><motion.div key={tab} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}} transition={{duration:.18,ease:"easeOut"}}>
-    <div className="page-intro"><div><p className="eyebrow dark-eyebrow">{roleNames[me.role]} / {tab.replace(/_/g,' ').toUpperCase()}</p><h1>{tab==='overview'?`Hello, ${me.full_name.split(' ')[0]}.`:active?.label||'Your workspace'}</h1><p>{tab==='overview'?greeting:tab==='verification'?'One secure step toward meaningful connections.':tab==='notifications'?'Stay close to everything that matters.':'Make each move with clarity and confidence.'}</p></div><div className={`status-chip status-${me.lgu_status}`}><span/>{me.lgu_status==='approved'?'LGU verified':me.lgu_status==='pending'?'Awaiting LGU approval':me.lgu_status==='rejected'?'Needs resubmission':'Account suspended'}</div></div>
+    <div className="page-intro"><div><p className="eyebrow dark-eyebrow">{roleNames[me.role]}</p><h1>{tab==='overview'?'Dashboard':active?.label||'Dashboard'}</h1></div><div className={`status-chip status-${me.lgu_status}`}><span/>{me.lgu_status==='approved'?'LGU verified':me.lgu_status==='pending'?'Awaiting LGU approval':me.lgu_status==='rejected'?'Needs resubmission':'Account suspended'}</div></div>
     {tab==='overview'&&<Overview role={me.role} me={me} navigate={navigate} refresh={refresh}/>}
     {['discover','applications','saved'].includes(tab)&&<SeekerPanels tab={tab} me={me} refresh={refresh} bump={bump}/>}
     {['jobs','candidates'].includes(tab)&&<EmployerPanels tab={tab} me={me} refresh={refresh} bump={bump}/>}
-    {['reviews','postings','users','audit','reports'].includes(tab)&&<AdminPanels tab={tab} me={me} refresh={refresh} bump={bump}/>}
+    {['reviews','postings','review-history','all-jobs','jobseekers','resume-removals','tracking','users','audit','reports'].includes(tab)&&<AdminPanels tab={tab} me={me} refresh={refresh} bump={bump}/>}
     {['profile','verification','notifications'].includes(tab)&&<AccountPanels tab={tab} me={me} refresh={refresh} bump={bump} updateMe={setMe}/>}
    </motion.div></AnimatePresence></div>
   </div>
+
  </div>;
 }
 
 function Overview({role,me,navigate,refresh}:{role:Role;me:Profile;navigate:(tab:string)=>void;refresh:number}){
  const [data,setData]=useState<any>(null);
- useEffect(()=>{request('dashboard').then(setData).catch(()=>{});},[refresh]);
+ const [error,setError]=useState('');
+ const [reload,setReload]=useState(0);
+ useEffect(()=>{let active=true;setError('');request('dashboard').then(value=>{if(active)setData(value);}).catch(reason=>{if(active)setError(reason instanceof Error?reason.message:'Dashboard unavailable.');});return()=>{active=false;};},[refresh,reload]);
  const stats=data?.stats||{};
- const copy:Record<Role,{one:string;two:string;action:string;tab:string}>={
-   jobseeker:{one:'Keep your next opportunity in view.',two:'Explore opportunities tailored to your goals and keep every application in motion.',action:'Find your next role',tab:'discover'},
-   employer:{one:'Good hiring starts with clear decisions.',two:'Manage postings, review candidates and move hiring forward.',action:'Post an opportunity',tab:'jobs'},
-   lgu_admin:{one:'Verification builds trust in every connection.',two:'Review credentials and job listings to keep the community safe.',action:'Review pending accounts',tab:'reviews'},
-   sys_admin:{one:'A reliable platform supports every opportunity.',two:'Support your community with oversight, stability and clear accountability.',action:'Manage accounts',tab:'users'}
+ const copy:Record<Role,{one:string;action:string;tab:string}>={
+   jobseeker:{one:'Job search',action:'Browse jobs',tab:'discover'},
+   employer:{one:'Recruitment',action:'My job posts',tab:'jobs'},
+   lgu_admin:{one:'LGU reviews',action:'Verify people',tab:'reviews'},
+   sys_admin:{one:'Administration',action:'Account controls',tab:'users'}
  };
  return <div className="overview-layout">
-   <div className="metrics-grid">{Object.entries(stats).slice(0,4).map(([key,value],i)=>{const target=role==='jobseeker'?(key==='applications'?'applications':key==='saved'?'saved':'discover'):role==='employer'?(key==='applicants'?'candidates':'jobs'):role==='lgu_admin'?(key==='pending_reviews'?'reviews':'reports'):key==='users'?'users':'reports';return <button type="button" className="metric-card metric-action" onClick={()=>navigate(target)} key={key}><span className="metric-top"><span>0{i+1} / {key.replace(/_/g,' ').toUpperCase()}</span><Activity size={18}/></span><strong>{String(value)}</strong><small>View {target.replace('_',' ') } <ArrowUpRight size={13}/></small></button>;})}{!Object.keys(stats).length&&[1,2,3].map(i=><div className="metric-card" key={i}><span className="metric-top">LOADING</span><strong>—</strong><small>Connecting to your workspace</small></div>)}</div>
-   <div className="overview-spotlight"><div className="spotlight-copy"><p className="eyebrow">YOUR WORKSPACE</p><h2>{copy[role].one}</h2><p>{copy[role].two}</p><button onClick={()=>navigate(copy[role].tab)} className="btn btn-lime">{copy[role].action} <ArrowUpRight size={18}/></button></div><div className="spotlight-art"><div className="spotlight-ring"><div className="spotlight-center"><Compass size={56} strokeWidth={1.15}/></div></div><span>LOCAL OPPORTUNITIES</span></div></div>
+   {error&&<div className="jl-data-error" role="alert"><span>{error}</span><button type="button" className="btn btn-outline btn-small" onClick={()=>setReload(v=>v+1)}>Retry dashboard</button></div>}
+   <div className="metrics-grid">{Object.entries(stats).slice(0,4).map(([key,value],i)=>{const target=role==='jobseeker'?(key==='applications'?'applications':key==='saved'?'saved':'discover'):role==='employer'?(key==='applicants'?'candidates':'jobs'):role==='lgu_admin'?(key==='pending_reviews'?'reviews':key==='jobseekers'?'jobseekers':key==='jobs'?'all-jobs':key==='applications'?'tracking':'reports'):key==='users'?'users':key==='jobs'?'all-jobs':'reports';return role==='employer'&&key==='jobseekers'?<div className="metric-card" key={key}><span className="metric-top">Total registered jobseekers</span><strong>{String(value)}</strong><small>Platform-wide account count</small></div>:<button type="button" className="metric-card metric-action" onClick={()=>navigate(target)} key={key}><span className="metric-top"><span>0{i+1} / {key.replace(/_/g,' ').toUpperCase()}</span><Activity size={18}/></span><strong>{String(value)}</strong><small>Open <ArrowUpRight size={13}/></small></button>;})}{!Object.keys(stats).length&&[1,2,3].map(i=><div className="metric-card" key={i}><span className="metric-top">LOADING</span><strong>—</strong><small>Loading dashboard data</small></div>)}</div>
+   <div className="overview-spotlight"><div className="spotlight-copy"><h2>{copy[role].one}</h2><button onClick={()=>navigate(copy[role].tab)} className="btn btn-lime">{copy[role].action} <ArrowUpRight size={18}/></button></div><div className="spotlight-art"><div className="spotlight-ring"><div className="spotlight-center"><Compass size={56} strokeWidth={1.15}/></div></div></div></div>
+   <RoleAIInsights role={role} navigate={navigate}/>
    {me.lgu_status!=='approved'&&['jobseeker','employer'].includes(role)&&<div className="approval-banner"><ShieldCheck size={22}/><div><strong>{me.lgu_status==='rejected'?'Your documents need a new review.':'Your account needs LGU verification.'}</strong><p>Submit your credentials to unlock job applications and employer posting.</p></div><button onClick={()=>navigate('verification')}>Start verification <ArrowUpRight size={17}/></button></div>}
-   <div className="overview-foot"><span><span className="signal-dot"/> CONNECTED · SECURE WORKSPACE</span><span>LOCAL OPPORTUNITIES. CLEAR NEXT STEPS.</span></div>
+   
  </div>;
 }

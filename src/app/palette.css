@@ -250,3 +250,28 @@ select option, select optgroup { background: #FFFFFF !important; color: #071B2B 
 }
 
 em,.op-no,.section-heading h2 em,.auth-art-main h2 em,.failure-content h1 em{font-style:normal!important}
+
+.skill-chip-list{display:flex;flex-wrap:wrap;gap:8px;margin:9px 0;min-height:10px}
+.skill-chip{display:inline-flex;gap:7px;align-items:center;padding:7px 11px;border-radius:100px;background:#B9E4E8;color:#071B2B;font-size:.86rem;font-weight:600}
+.skill-chip button{display:inline-grid;place-items:center;border:0;background:transparent;color:#071B2B;cursor:pointer}
+.document-library{display:flex;flex-direction:column;gap:12px}
+.document-submission{padding:14px 0;border-bottom:1px solid rgba(7,27,43,.12)}
+.document-group-heading{display:flex;align-items:center;gap:12px;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap}
+.document-library-row,.document-upload-row,.review-document-shortcut{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid rgba(7,27,43,.12);border-radius:12px;background:#f9fbfb;margin-block:6px}
+.document-library-label{flex:1;min-width:0;display:grid;gap:4px}
+.document-library-label strong,.document-library-label small{overflow-wrap:anywhere}
+.document-library-label small,.document-group-heading small{font-size:.78rem;color:#45616b}
+.document-upload-row .form-field{margin:0}
+.doc-delete{display:inline-flex;align-items:center;justify-content:center;gap:4px;border:1px solid #ccdbdc;background:#fff;color:#783434;border-radius:8px;min-height:36px;min-width:36px;padding:6px 9px;cursor:pointer}
+.document-history-file{display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap}
+.document-history-file span{font-size:.83rem;overflow-wrap:anywhere}
+.profile-documents{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:18px;align-items:start}
+.verification-primary{display:flex;flex-direction:column;gap:18px}
+.verification-primary .resume-panel{order:1}
+.verification-primary .document-library{order:2}
+.verification-primary .verification-submission-form{order:3}
+.file-view-image{width:100%;height:68vh;max-height:75vh;object-fit:contain;background:#f3f7f8}
+.file-view-status{min-height:280px;display:flex;align-items:center;justify-content:center;gap:10px;padding:25px;text-align:center;color:#253c47}
+.review-document-shortcut{flex-wrap:wrap;margin:6px 0;font-size:.85rem}
+.review-document-shortcut span{overflow-wrap:anywhere;flex:1}
+@media(max-width:650px){.document-library-row,.document-upload-row{flex-wrap:wrap}.document-library-label{min-width:65%}}

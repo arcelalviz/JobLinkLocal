@@ -14,7 +14,7 @@ export async function validateFile(file:File, pdfOnly=false) {
   return {bytes,mime,ext};
 }
 
-export async function uploadPrivate(bucket:'verification-documents'|'resumes',ownerId:string,file:File,pdfOnly=false) {
+export async function uploadPrivate(bucket:'verification-documents'|'resumes'|'avatars',ownerId:string,file:File,pdfOnly=false) {
   const {bytes,mime,ext}=await validateFile(file,pdfOnly);
   const path=`${ownerId}/${randomUUID()}.${ext}`;
   const admin=adminClient();
