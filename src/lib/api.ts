@@ -10,7 +10,7 @@ import { matchJobSkills, normalizeSkills } from '@/lib/skillMatching';
 import { signUpSchema, jobSchema, applicationSchema, decisionSchema, validated } from '@/lib/validators';
 import { reportData, csvReport, pdfReport } from '@/lib/report';
 import { isOlongapoBarangay } from '@/lib/olongapo';
-import { generateSummary, SummaryError } from '@/lib/ai-summary';
+import { builtInSummary } from '@/lib/ai-summary';
 import { normalizeApplicationRelations } from '@/lib/application-relations';
 
 const db=()=>adminClient();
@@ -749,36 +749,36 @@ export async function api(req:NextRequest,parts:string[]) {
  }
 
  if(routeIs(parts,'ai','explain')&&method==='POST') {
-   const {user,profile}=await currentUser();
-   await checkLimit(req,`ai_explain_${user.id}`,8,3600);
-   const key=process.env.OPENAI_API_KEY?.trim();
-   if(!key)fail('AI summaries are not configured. Built-in skill matching and analytics are still available.',503);
+   const {user,profile}=await currentUser(['jobseeker','employer','lgu_admin','sys_admin']);
+   await checkLimit(req,`ai_explain_${user.id}`,30,3600);
    let metrics:Record<string,number>={};
-   // Transmit only role-level counts, no names, identities, resumes, addresses, or credentials.
+   const countOrFail=(result:{count:number|null;error:{code?:string;message?:string}|null})=>{
+     dbError(result.error,'Unable to load summary counts.');
+     if(result.count===null)fail('Summary counts are unavailable.',503);
+     return result.count;
+   };
    if(profile.role==='jobseeker'){
-     const {count:jobs}=await db().from('jobs').select('id',{head:true,count:'exact'}).eq('status','published');
-     const {count:apps}=await db().from('applications').select('id',{head:true,count:'exact'}).eq('seeker_id',user.id);
-     metrics={available_jobs:jobs||0,submitted_applications:apps||0};
+     const jobs=await db().from('jobs').select('id',{head:true,count:'exact'}).eq('status','published');
+     const apps=await db().from('applications').select('id',{head:true,count:'exact'}).eq('seeker_id',user.id);
+     metrics={available_jobs:countOrFail(jobs),submitted_applications:countOrFail(apps)};
    }else if(profile.role==='employer'){
-     const {data:jobs}=await db().from('jobs').select('id').eq('employer_id',user.id);
-     const ids=(jobs||[]).map((j:any)=>j.id);
-     const {count:apps}=ids.length?await db().from('applications').select('id',{head:true,count:'exact'}).in('job_id',ids):{count:0};
-     metrics={own_job_posts:ids.length,submitted_applications:apps||0};
+     const jobs=await db().from('jobs').select('id').eq('employer_id',user.id);
+     dbError(jobs.error,'Unable to load your job postings.');
+     const ids=(jobs.data||[]).map((j:any)=>j.id);
+     const apps=ids.length?await db().from('applications').select('id',{head:true,count:'exact'}).in('job_id',ids):{count:0,error:null};
+     metrics={own_job_posts:ids.length,submitted_applications:countOrFail(apps)};
    }else if(profile.role==='lgu_admin'){
-     const {count:verifications}=await db().from('verification_submissions').select('id',{head:true,count:'exact'}).eq('status','pending');
-     const {count:jobs}=await db().from('jobs').select('id',{head:true,count:'exact'}).eq('status','pending');
-     metrics={pending_verifications:verifications||0,pending_job_reviews:jobs||0};
+     const verifications=await db().from('verification_submissions').select('id',{head:true,count:'exact'}).eq('status','pending');
+     const jobs=await db().from('jobs').select('id',{head:true,count:'exact'}).eq('status','pending');
+     metrics={pending_verifications:countOrFail(verifications),pending_job_reviews:countOrFail(jobs)};
    }else{
-     const {count:accounts}=await db().from('profiles').select('id',{head:true,count:'exact'});
-     const {count:apps}=await db().from('applications').select('id',{head:true,count:'exact'});
-     metrics={total_accounts:accounts||0,total_applications:apps||0};
+     const accounts=await db().from('profiles').select('id',{head:true,count:'exact'});
+     const apps=await db().from('applications').select('id',{head:true,count:'exact'});
+     metrics={total_accounts:countOrFail(accounts),total_applications:countOrFail(apps)};
    }
-   let answer:string;
-   try{
-     answer=await generateSummary(key,process.env.OPENAI_MODEL?.trim()||'gpt-6.1-terra',profile.role,metrics);
-   }catch(error){if(error instanceof SummaryError)fail(error.message,503);throw error;}
-   await recordAudit(user.id,'ai.summary_generated',undefined,{role:profile.role});
-   return ok({text:answer,method:'External AI summary of aggregated counts',metrics});
+   const text=builtInSummary(profile.role,metrics);
+   await recordAudit(user.id,'ai.summary_requested',undefined,{role:profile.role});
+   return ok({role:profile.role,text,method:'Built-in summary of authenticated aggregate counts',metrics});
  }
  if(routeIs(parts,'ai','insights')&&method==='GET') {
    const {user,profile}=await currentUser();

@@ -1,23 +1,30 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
+const path=require('node:path');
 const ts=require('typescript');
-const {createRequire}=require('node:module');
-const source=fs.readFileSync(require('node:path').join(__dirname,'../src/lib/ai-summary.ts'),'utf8');
-const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-const mod={exports:{}};new Function('module','exports','require',code)(mod,mod.exports,createRequire(__filename));
-const {generateSummary}=mod.exports;
+function load(name){const source=fs.readFileSync(path.join(__dirname,'../src/lib',name+'.ts'),'utf8');const code=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const mod={exports:{}};new Function('module','exports','require',code)(mod,mod.exports,require);return mod.exports;}
+const {summaryFacts,builtInSummary,validatedModelSummary}=load('ai-summary');
+const {startLocalSummary}=load('local-summary-client');
 (async()=>{
- let count=0;const original=global.fetch;const originalLog=console.error;const logs=[];console.error=(...args)=>logs.push(JSON.stringify(args));
+ let passed=0;
+ const cases=[['jobseeker',{available_jobs:20,submitted_applications:4}],['employer',{own_job_posts:2,submitted_applications:10}],['lgu_admin',{pending_verifications:0,pending_job_reviews:7}],['sys_admin',{total_accounts:25,total_applications:18}]];
+ for(const [role,metrics] of cases){const facts=summaryFacts(role,{...metrics,private_name:'Never include me'});assert.equal(facts.length,2);assert.equal(builtInSummary(role,metrics),facts.join(' '));assert.ok(!facts.join(' ').includes('Never include me'));assert.equal(validatedModelSummary(facts.join(' '),facts),facts.join(' '));assert.equal(validatedModelSummary([...facts].reverse().join(' '),facts),[...facts].reverse().join(' '));passed++;}
+ assert.throws(()=>summaryFacts('unknown',{}));passed++;
+ assert.throws(()=>summaryFacts('jobseeker',{available_jobs:0}));passed++;
+ assert.throws(()=>summaryFacts('jobseeker',{available_jobs:-1,submitted_applications:0}));passed++;
+ const facts=summaryFacts(...cases[0]);
+ assert.equal(validatedModelSummary('There are 100 jobs.',facts),null);passed++;
+ assert.equal(validatedModelSummary(facts.join(' ')+' Reject all applicants.',facts),null);passed++;
+ assert.equal(validatedModelSummary(facts[0],facts),null);passed++;
+ const OriginalWorker=global.Worker;
+ class FakeWorker{constructor(url,opts){assert.equal(url,'/workers/local-summary.mjs');assert.equal(opts.type,'module');FakeWorker.last=this;}postMessage(message){assert.deepEqual(message,{facts});}terminate(){this.terminated=true;}}
  try{
-  for(const [status,code,type,reason] of [[401,'invalid_api_key','invalid_request_error','credentials'],[429,'insufficient_quota','insufficient_quota','quota'],[404,'model_not_found','invalid_request_error','model'],[403,'','permission_error','permission'],[429,'rate_limit_exceeded','rate_limit_error','rate_limit'],[400,'invalid_request_error','invalid_request_error','request'],[503,'server_is_overloaded','service_unavailable_error','provider']]){
-   global.fetch=async()=>new Response(JSON.stringify({error:{code,type,message:'secret-test-key'}}),{status});
-   await assert.rejects(generateSummary('secret-test-key','gpt-6.1-terra','jobseeker',{available_jobs:2}),e=>e.reason===reason);count++;
-  }
-  global.fetch=async(_,options)=>{const b=JSON.parse(options.body);assert.equal(b.reasoning.effort,'none');assert.equal(b.store,false);assert.equal(b.max_output_tokens,1024);return new Response(JSON.stringify({status:'completed',output:[{content:[{type:'output_text',text:'Two jobs are available.'}]}]}));};
-  assert.equal(await generateSummary('secret-test-key','gpt-6.1-terra','jobseeker',{available_jobs:2}),'Two jobs are available.');count++;
-  global.fetch=async()=>new Response(JSON.stringify({status:'incomplete',output:[]}));await assert.rejects(generateSummary('secret-test-key','gpt-6.1-terra','jobseeker',{}),e=>e.reason==='incomplete');count++;
-  global.fetch=async()=>{throw new Error('secret-test-key')};await assert.rejects(generateSummary('secret-test-key','gpt-6.1-terra','jobseeker',{}),e=>e.reason==='connection');count++;
-  assert.ok(logs.every(l=>!l.includes('secret-test-key')));count++;
-  console.log(`${count} mocked AI summary checks passed`);
- }finally{global.fetch=original;console.error=originalLog;}
+  global.Worker=FakeWorker;
+  let progress='';let task=startLocalSummary(facts,s=>progress=s);FakeWorker.last.onmessage({data:{kind:'progress',text:'Loading'}});assert.equal(progress,'Loading');FakeWorker.last.onmessage({data:{kind:'result',text:facts.join(' ')}});assert.equal(await task.promise,facts.join(' '));assert.ok(FakeWorker.last.terminated);passed++;
+  task=startLocalSummary(facts,()=>{});FakeWorker.last.onerror();await assert.rejects(task.promise,/could not load/);assert.ok(FakeWorker.last.terminated);passed++;
+  task=startLocalSummary(facts,()=>{});task.cancel();await assert.rejects(task.promise,/cancelled/);assert.ok(FakeWorker.last.terminated);passed++;
+  global.Worker=class{constructor(){throw Error('unsupported');}};task=startLocalSummary(facts,()=>{});await assert.rejects(task.promise,/not supported/);passed++;
+ }finally{global.Worker=OriginalWorker;}
+ const api=fs.readFileSync(path.join(__dirname,'../src/lib/api.ts'),'utf8');assert.ok(!api.includes('OPENAI_API_KEY'));assert.ok(!api.includes('generateSummary('));assert.ok(api.includes('builtInSummary(profile.role,metrics)'));passed++;
+ console.log(`${passed} local summary and mocked worker checks passed`);
 })().catch(e=>{console.error(e);process.exitCode=1;});
