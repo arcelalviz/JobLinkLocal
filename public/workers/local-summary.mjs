@@ -21,7 +21,7 @@ self.onmessage = async ({data}) => {
    });
   }
   self.postMessage({kind:'progress',text:'Generating on your device…'});
-  const result=await generator(`Summarize the following facts. Copy both sentences exactly, in either order. Do not add or change anything. ${facts.join(' ')}`,{max_new_tokens:80,do_sample:false});
+  const result=await generator(`Question: Which dashboard fact should be mentioned first? Choose A or B. A: ${facts[0]} B: ${facts[1]} Answer:`,{max_new_tokens:32,do_sample:false});
   self.postMessage({kind:'result',text:result?.[0]?.generated_text});
  }catch{generator=undefined;self.postMessage({kind:'error'});}
 };

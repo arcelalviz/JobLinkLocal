@@ -14,7 +14,7 @@ export function startLocalSummary(facts:string[],onProgress:(status:string)=>voi
   };
   cancel=()=>finish(new Error('Local generation cancelled.'));
   try{
-   worker=new Worker('/workers/local-summary.mjs',{type:'module',name:'joblinklocal-summary'});
+   worker=new Worker('/workers/local-summary.mjs?v=2',{type:'module',name:'joblinklocal-summary'});
    worker.onmessage=({data})=>{
     if(data?.kind==='progress'&&typeof data.text==='string')onProgress(data.text);
     else if(data?.kind==='result'&&typeof data.text==='string')finish(undefined,data.text);
