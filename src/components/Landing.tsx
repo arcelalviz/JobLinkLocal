@@ -93,9 +93,9 @@ export function Landing() {
         <label className="pro-search"><Search size={20}/><span className="sr-only">Search available jobs</span><input aria-label="Search jobs by title, employer or location" placeholder="Search by job title, employer, or location" value={search} onChange={event => setSearch(event.target.value)}/><span className="pro-search-result">{loading ? 'Loading' : `${visibleJobs.length} ${visibleJobs.length===1?'result':'results'}`}</span></label>
         <div className="pro-job-grid">
           {loading ? <div className="pro-no-jobs">Loading current openings…</div> : loadError ? <div className="pro-no-jobs">We couldn't load job listings. Please try again later.</div> : visibleJobs.length === 0 ? <div className="pro-no-jobs">{search ? 'No openings match that search. Try another keyword.' : 'There are no published openings at the moment.'}</div> : visibleJobs.slice(0, 6).map(job => <article className="pro-job-card" key={job.id}>
-            <div className="pro-job-card-top"><span className="pro-job-category">{job.category || 'Opportunity'}</span><span className="pro-job-work">{job.work_setup}</span></div>
             <div className="jl-job-summary"><div className="pro-job-company"><Building2 size={17}/>{job.company_name}</div><h3><Link href={`/jobs/${job.id}`} className="jl-job-title-link">{job.title}</Link></h3>
             <p className="pro-job-location"><MapPin size={16}/>{job.barangay?`Brgy. ${job.barangay}, Olongapo City`:job.location}</p><p className="pro-posted-time">Posted {manilaTimestamp(job.published_at||job.created_at)}</p></div>
+            <div className="pro-job-card-top"><span className="pro-job-category">{job.category || 'Opportunity'}</span><span className="pro-job-work">{job.work_setup}</span></div>
             <div className="pro-job-footer"><div><strong>{formatSalary(job)}</strong><span>{job.employment_type}</span></div><Link href={`/jobs/${job.id}`} className="pro-job-action" aria-label={`View details for ${job.title}`}><ArrowUpRight size={19}/></Link></div>
           </article>)}
         </div>
