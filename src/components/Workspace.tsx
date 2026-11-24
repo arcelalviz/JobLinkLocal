@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useIsPresent } from 'motion/react';
 import { Compass, Grid2X2, Bookmark, BriefcaseBusiness, Users, ShieldCheck, ClipboardCheck, BarChart3, Bell, UserRound, LogOut, Menu, X, ArrowUpRight, Activity, FileCheck2, Settings2, ScrollText } from 'lucide-react';
 import { request } from '@/lib/http';
 import { useToast } from '@/components/ToastProvider';
@@ -41,6 +41,11 @@ const tabDefinitions=[
 
 const roleNames:Record<Role,string>={jobseeker:'Jobseeker',employer:'Employer',lgu_admin:'LGU Admin',sys_admin:'System Admin'};
 
+function WorkspaceStage({children}:{children:React.ReactNode}){
+ const present=useIsPresent();
+ return <motion.div initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4,transition:{duration:.16,ease:"easeIn"}}} transition={{duration:.20,ease:[0.16,1,0.3,1]}} className="jl-workspace-stage" inert={!present} aria-hidden={!present}>{children}</motion.div>;
+}
+
 export function Workspace(){
  const router=useRouter();
  const searchParams=useSearchParams();
@@ -51,6 +56,14 @@ export function Workspace(){
  const [menu,setMenu]=useState(false);
  const [accountMenu,setAccountMenu]=useState(false);
  const [confirmLogout,setConfirmLogout]=useState(false);
+ const accountRef=useRef<HTMLDivElement>(null);
+ useEffect(()=>{
+  if(!accountMenu&&!menu)return;
+  const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){setAccountMenu(false);setMenu(false);if(accountMenu)accountRef.current?.querySelector<HTMLButtonElement>('button.profile-avatar')?.focus();}};
+  const outside=(event:PointerEvent)=>{if(accountMenu&&event.target instanceof Node&&!accountRef.current?.contains(event.target))setAccountMenu(false);};
+  document.addEventListener('keydown',escape);document.addEventListener('pointerdown',outside);
+  return ()=>{document.removeEventListener('keydown',escape);document.removeEventListener('pointerdown',outside);};
+ },[accountMenu,menu]);
  const [refresh,setRefresh]=useState(0);
  const [unread,setUnread]=useState(0);
  const seenNotifications=useRef<Set<string>|null>(null);
@@ -131,15 +144,15 @@ export function Workspace(){
    
   </aside>
   <div className="workspace-main">
-   <header className="workspace-topbar"><button className="mobile-menu-button" onClick={()=>setMenu(true)} aria-label="Open navigation"><Menu size={22}/></button><span className="breadcrumb">WORKSPACE</span><div className="topbar-right"><span className="topbar-date">{date}</span><ManilaClock/><div className="jl-theme-in-header"><ThemeToggle/></div><button className="notification-trigger" onClick={()=>navigate('notifications')} aria-label="Notifications"><Bell size={20}/>{unread>0&&<span className="notification-indicator"/>}</button><div className="jl-topbar-account"><button type="button" className="profile-avatar" onClick={()=>{setAccountMenu(v=>!v);setConfirmLogout(false);}} aria-label="Account menu" aria-expanded={accountMenu}>{me.avatar_url?<img src={`/api/files/avatar/${me.id}?v=${encodeURIComponent(me.avatar_url)}`} alt=""/>:me.full_name.slice(0,1).toUpperCase()}</button>{accountMenu&&<div className="jl-account-popover"><strong>{me.full_name}</strong><small>{roleNames[me.role]}</small><button type="button" onClick={()=>{navigate('profile');setAccountMenu(false);}}><UserRound size={16}/> My profile</button>{confirmLogout?<div className="jl-signout-confirm"><p>Are you sure you want to sign out?</p><div><button type="button" onClick={()=>setConfirmLogout(false)}>Cancel</button><button type="button" onClick={()=>{setAccountMenu(false);setConfirmLogout(false);void logout();}}>Sign out</button></div></div>:<button type="button" onClick={()=>setConfirmLogout(true)}><LogOut size={16}/> Sign out</button>}</div>}</div></div></header>
-   <div className="workspace-content"><AnimatePresence mode="wait"><motion.div key={tab} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}} transition={{duration:.18,ease:"easeOut"}}>
+   <header className="workspace-topbar"><button className="mobile-menu-button" onClick={()=>setMenu(true)} aria-label="Open navigation"><Menu size={22}/></button><span className="breadcrumb">WORKSPACE</span><div className="topbar-right"><span className="topbar-date">{date}</span><ManilaClock/><div className="jl-theme-in-header"><ThemeToggle/></div><button className="notification-trigger" onClick={()=>navigate('notifications')} aria-label="Notifications"><Bell size={20}/>{unread>0&&<span className="notification-indicator"/>}</button><div className="jl-topbar-account" ref={accountRef}><button type="button" className="profile-avatar" onClick={()=>{setAccountMenu(v=>!v);setConfirmLogout(false);}} aria-label="Account menu" aria-expanded={accountMenu}>{me.avatar_url?<img src={`/api/files/avatar/${me.id}?v=${encodeURIComponent(me.avatar_url)}`} alt=""/>:me.full_name.slice(0,1).toUpperCase()}</button><AnimatePresence>{accountMenu&&<motion.div className="jl-account-popover" initial={{opacity:0,scale:.95,y:-6}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:.95,y:-6,transition:{duration:.16,ease:"easeIn"}}}><strong>{me.full_name}</strong><small>{roleNames[me.role]}</small><button type="button" onClick={()=>{navigate('profile');setAccountMenu(false);}}><UserRound size={16}/> My profile</button>{confirmLogout?<div className="jl-signout-confirm"><p>Are you sure you want to sign out?</p><div><button type="button" onClick={()=>setConfirmLogout(false)}>Cancel</button><button type="button" onClick={()=>{setAccountMenu(false);setConfirmLogout(false);void logout();}}>Sign out</button></div></div>:<button type="button" onClick={()=>setConfirmLogout(true)}><LogOut size={16}/> Sign out</button>}</motion.div>}</AnimatePresence></div></div></header>
+   <div className="workspace-content"><AnimatePresence mode="sync"><WorkspaceStage key={tab}>
     <div className="page-intro"><div><p className="eyebrow dark-eyebrow">{roleNames[me.role]}</p><h1>{tab==='overview'?'Dashboard':active?.label||'Dashboard'}</h1></div><div className={`status-chip status-${me.lgu_status}`}><span/>{me.lgu_status==='approved'?'LGU verified':me.lgu_status==='pending'?'Awaiting LGU approval':me.lgu_status==='rejected'?'Needs resubmission':'Account suspended'}</div></div>
     {tab==='overview'&&<Overview role={me.role} me={me} navigate={navigate} refresh={refresh}/>}
     {['discover','applications','saved'].includes(tab)&&<SeekerPanels tab={tab} me={me} refresh={refresh} bump={bump}/>}
     {['jobs','candidates'].includes(tab)&&<EmployerPanels tab={tab} me={me} refresh={refresh} bump={bump}/>}
     {['reviews','postings','review-history','all-jobs','jobseekers','resume-removals','tracking','users','audit','reports'].includes(tab)&&<AdminPanels tab={tab} me={me} refresh={refresh} bump={bump}/>}
     {['profile','verification','notifications'].includes(tab)&&<AccountPanels tab={tab} me={me} refresh={refresh} bump={bump} updateMe={setMe}/>}
-   </motion.div></AnimatePresence></div>
+   </WorkspaceStage></AnimatePresence></div>
   </div>
 
  </div>;
@@ -159,8 +172,8 @@ function Overview({role,me,navigate,refresh}:{role:Role;me:Profile;navigate:(tab
  };
  return <div className="overview-layout">
    {error&&<div className="jl-data-error" role="alert"><span>{error}</span><button type="button" className="btn btn-outline btn-small" onClick={()=>setReload(v=>v+1)}>Retry dashboard</button></div>}
-   <div className="metrics-grid">{Object.entries(stats).slice(0,4).map(([key,value],i)=>{const target=role==='jobseeker'?(key==='applications'?'applications':key==='saved'?'saved':'discover'):role==='employer'?(key==='applicants'?'candidates':'jobs'):role==='lgu_admin'?(key==='pending_reviews'?'reviews':key==='jobseekers'?'jobseekers':key==='jobs'?'all-jobs':key==='applications'?'tracking':'reports'):key==='users'?'users':key==='jobs'?'all-jobs':'reports';return role==='employer'&&key==='jobseekers'?<div className="metric-card" key={key}><span className="metric-top">Total registered jobseekers</span><strong>{String(value)}</strong><small>Platform-wide account count</small></div>:<button type="button" className="metric-card metric-action" onClick={()=>navigate(target)} key={key}><span className="metric-top"><span>0{i+1} / {key.replace(/_/g,' ').toUpperCase()}</span><Activity size={18}/></span><strong>{String(value)}</strong><small>Open <ArrowUpRight size={13}/></small></button>;})}{!Object.keys(stats).length&&[1,2,3].map(i=><div className="metric-card" key={i}><span className="metric-top">LOADING</span><strong>—</strong><small>Loading dashboard data</small></div>)}</div>
-   <div className="overview-spotlight"><div className="spotlight-copy"><h2>{copy[role].one}</h2><button onClick={()=>navigate(copy[role].tab)} className="btn btn-lime">{copy[role].action} <ArrowUpRight size={18}/></button></div><div className="spotlight-art"><div className="spotlight-ring"><div className="spotlight-center"><Compass size={56} strokeWidth={1.15}/></div></div></div></div>
+   <div className="metrics-grid">{Object.entries(stats).slice(0,4).map(([key,value])=>{const target=role==='jobseeker'?(key==='applications'?'applications':key==='saved'?'saved':'discover'):role==='employer'?(key==='applicants'?'candidates':'jobs'):role==='lgu_admin'?(key==='pending_reviews'?'reviews':key==='jobseekers'?'jobseekers':key==='jobs'?'all-jobs':key==='applications'?'tracking':'reports'):key==='users'?'users':key==='jobs'?'all-jobs':'reports';return role==='employer'&&key==='jobseekers'?<div className="metric-card" key={key}><span className="metric-top">Total registered jobseekers</span><strong>{String(value)}</strong><small>Platform-wide account count</small></div>:<button type="button" className="metric-card metric-action" onClick={()=>navigate(target)} key={key}><span className="metric-top"><span>{key.replace(/_/g,' ')}</span><Activity size={16}/></span><strong>{String(value)}</strong><small>Open <ArrowUpRight size={13}/></small></button>;})}{!Object.keys(stats).length&&[1,2,3].map(i=><div className="metric-card" key={i}><span className="metric-top">LOADING</span><strong>—</strong><small>Loading dashboard data</small></div>)}</div>
+   <div className="overview-spotlight"><div className="spotlight-copy"><h2>{copy[role].one}</h2><button onClick={()=>navigate(copy[role].tab)} className="btn btn-lime">{copy[role].action} <ArrowUpRight size={18}/></button></div></div>
    <RoleAIInsights role={role} navigate={navigate}/>
    {me.lgu_status!=='approved'&&['jobseeker','employer'].includes(role)&&<div className="approval-banner"><ShieldCheck size={22}/><div><strong>{me.lgu_status==='rejected'?'Your documents need a new review.':'Your account needs LGU verification.'}</strong><p>Submit your credentials to unlock job applications and employer posting.</p></div><button onClick={()=>navigate('verification')}>Start verification <ArrowUpRight size={17}/></button></div>}
    

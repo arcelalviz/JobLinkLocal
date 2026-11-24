@@ -26,10 +26,10 @@ export function ToastProvider({children}:{children:React.ReactNode}) {
  return <Context.Provider value={actions}>
   {children}
   <div className="toast-stack" aria-live="polite" aria-atomic="false">
-   <AnimatePresence initial={false} mode="popLayout">
+   <AnimatePresence initial={false} mode="sync">
     {items.map(t=>{
       const Icon=icons[t.tone];
-      return <motion.div key={t.id} layout initial={{opacity:0,y:-24,scale:.9}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:-16,scale:.92}} transition={{type:'spring',damping:25,stiffness:330}} className={`toast toast-${t.tone}`} role={t.tone==='error'?'alert':'status'}>
+      return <motion.div key={t.id} layout initial={{opacity:0,y:-10,scale:.95}} animate={{opacity:1,y:0,scale:1}} exit={{opacity:0,y:-8,scale:.95,transition:{duration:.16,ease:"easeIn"}}} transition={{duration:.20,ease:[0.16,1,0.3,1]}} className={`toast toast-${t.tone}`} role={t.tone==='error'?'alert':'status'}>
        <span className="toast-icon"><Icon size={18} className={t.tone==='loading'?'spin':''}/></span>
        <span className="toast-copy"><strong>{t.title}</strong>{t.description&&<small>{t.description}</small>}</span>
        <button className="toast-close" onClick={()=>dismiss(t.id)} aria-label="Dismiss notification"><X size={15}/></button>

@@ -1,4 +1,5 @@
 'use client';
+import { MotionConfig } from 'motion/react';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 type Theme = 'light' | 'dark' | 'system';
@@ -19,6 +20,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const active = theme === 'system' ? (systemDark ? 'dark' : 'light') : theme;
   useEffect(() => { document.documentElement.dataset.theme = active; document.documentElement.style.colorScheme = active; }, [active]);
   const value = useMemo<ThemeContextValue>(() => ({ theme, active, setTheme(value) { setThemeState(value); window.localStorage.setItem('joblink-theme', value); } }), [theme, active]);
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={value}><MotionConfig reducedMotion="user" transition={{duration:.20,ease:[0.16,1,0.3,1]}}>{children}</MotionConfig></ThemeContext.Provider>;
 }
 export const useTheme = () => useContext(ThemeContext);

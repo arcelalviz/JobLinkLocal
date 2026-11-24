@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, ArrowUpRight, BriefcaseBusiness, Building2, Check, ChevronRight, CircleCheck, FileCheck2, MapPin, Menu, Search, ShieldCheck, UserRound, X } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, BriefcaseBusiness, Building2, Check, ChevronRight, FileCheck2, MapPin, Menu, Search, ShieldCheck, UserRound, X } from 'lucide-react';
 import { request } from '@/lib/http';
 import type { Job } from '@/types';
 import { BrandMark } from '@/components/BrandMark';
@@ -64,14 +65,14 @@ export function Landing() {
 
     <section className="pro-hero" aria-labelledby="hero-title">
       <div className="pro-container pro-hero-grid">
-        <div className="pro-hero-copy"><div className="pro-audience-toggle" role="group" aria-label="Choose what you're here to do"><button type="button" className={audience==='jobseeker'?'active':''} onClick={()=>setAudience('jobseeker')}>I'm looking for a job</button><button type="button" className={audience==='employer'?'active':''} onClick={()=>setAudience('employer')}>I'm hiring</button></div>
-          <h1 id="hero-title">{audience==='jobseeker'?<>Find jobs in Olongapo City</>:<>Hire in Olongapo City</>}</h1>
-          <p>{audience==='jobseeker'?'Browse local job postings and track applications.':'Post vacancies, review applicants and manage hiring.'}</p>
+        <div className="pro-hero-copy"><LayoutGroup id="landing-audience"><div className="pro-audience-toggle" role="group" aria-label="Choose what you're here to do"><button type="button" className={audience==='jobseeker'?'active':''} aria-pressed={audience==='jobseeker'} onClick={()=>setAudience('jobseeker')}>{audience==='jobseeker'&&<motion.span className="jl-audience-indicator" layoutId="audience-selection" transition={{duration:.20,ease:"easeInOut"}}/>}<span>I'm looking for a job</span></button><button type="button" className={audience==='employer'?'active':''} aria-pressed={audience==='employer'} onClick={()=>setAudience('employer')}>{audience==='employer'&&<motion.span className="jl-audience-indicator" layoutId="audience-selection" transition={{duration:.20,ease:"easeInOut"}}/>}<span>I'm hiring</span></button></div></LayoutGroup>
+          <div id="hero-title" className="jl-hero-title-wrap"><AnimatePresence initial={false} mode="sync"><motion.h1 key={audience} initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4,transition:{duration:.16}}}>{audience==='jobseeker'?<>Jobs in<br/><span>Olongapo City.</span></>:<>Hiring in<br/><span>Olongapo City.</span></>}</motion.h1></AnimatePresence></div>
+          <p>{audience==='jobseeker'?'Explore job openings in Olongapo City and track your applications.':'Post vacancies in Olongapo City, review applicants and manage hiring.'}</p>
           <div className="pro-hero-actions"><Link className="pro-button pro-button-primary pro-button-large" href={audience==='jobseeker'?'#opportunities':'/register?role=employer'}>{audience==='jobseeker'?'Explore jobs':'Register your business'} <ArrowRight size={18}/></Link><a className="pro-text-link" href={audience==='jobseeker'?'#business-directory':'#how-it-works'}>{audience==='jobseeker'?'Verified businesses':'How employer approval works'} <ArrowUpRight size={17}/></a></div>
-          <div className="pro-trust-line"><span><CircleCheck size={17}/> Application status tracking</span><span><FileCheck2 size={17}/> LGU review process</span></div>
+          
         </div>
         <div className="pro-hero-panel" aria-label={audience==='jobseeker'?'Latest employment opportunities preview':'Verified businesses preview'}>
-          <div className="pro-panel-head"><div><h2>{audience==='jobseeker'?'Latest openings':'Verified local businesses'}</h2></div></div>
+          <div className="pro-panel-head"><div><p className="jl-panel-kicker">LOCAL DIRECTORY</p><h2>{audience==='jobseeker'?'Latest openings':'Verified local businesses'}</h2></div></div>
           <div className="pro-panel-body">
             {audience==='employer' ? (businesses.length?businesses.slice(0,3).map(business=><div className="pro-preview-job" key={business.id}><span className="pro-preview-company"><Building2 size={18}/></span><div><strong>{business.business_name}</strong><span>{business.industry||'Registered employer'} · LGU-verified account</span></div><ChevronRight size={18} className="pro-preview-arrow"/></div>):<div className="pro-panel-message">Verified businesses will appear as they join.</div>) : loading ? <div className="pro-panel-message">Loading available positions…</div> : loadError ? <div className="pro-panel-message">Open positions could not be loaded right now.</div> : jobs.length === 0 ? <div className="pro-panel-message">No published jobs available.</div> : jobs.slice(0, 3).map(job => <Link href={`/jobs/${job.id}`} className="pro-preview-job jl-preview-clickable" key={job.id}>
               <span className="pro-preview-company"><Building2 size={18}/></span>
@@ -93,8 +94,8 @@ export function Landing() {
         <div className="pro-job-grid">
           {loading ? <div className="pro-no-jobs">Loading current openings…</div> : loadError ? <div className="pro-no-jobs">We couldn't load job listings. Please try again later.</div> : visibleJobs.length === 0 ? <div className="pro-no-jobs">{search ? 'No openings match that search. Try another keyword.' : 'There are no published openings at the moment.'}</div> : visibleJobs.slice(0, 6).map(job => <article className="pro-job-card" key={job.id}>
             <div className="pro-job-card-top"><span className="pro-job-category">{job.category || 'Opportunity'}</span><span className="pro-job-work">{job.work_setup}</span></div>
-            <div className="pro-job-company"><Building2 size={17}/>{job.company_name}</div><h3><Link href={`/jobs/${job.id}`} className="jl-job-title-link">{job.title}</Link></h3>
-            <p className="pro-job-location"><MapPin size={16}/>{job.barangay?`Brgy. ${job.barangay}, Olongapo City`:job.location}</p><p className="pro-posted-time">Posted {manilaTimestamp(job.published_at||job.created_at)}</p>
+            <div className="jl-job-summary"><div className="pro-job-company"><Building2 size={17}/>{job.company_name}</div><h3><Link href={`/jobs/${job.id}`} className="jl-job-title-link">{job.title}</Link></h3>
+            <p className="pro-job-location"><MapPin size={16}/>{job.barangay?`Brgy. ${job.barangay}, Olongapo City`:job.location}</p><p className="pro-posted-time">Posted {manilaTimestamp(job.published_at||job.created_at)}</p></div>
             <div className="pro-job-footer"><div><strong>{formatSalary(job)}</strong><span>{job.employment_type}</span></div><Link href={`/jobs/${job.id}`} className="pro-job-action" aria-label={`View details for ${job.title}`}><ArrowUpRight size={19}/></Link></div>
           </article>)}
         </div>

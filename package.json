@@ -12,7 +12,7 @@
     "test:logic": "node scripts/test-logic.cjs"
   },
   "engines": {
-    "node": "22.x"
+    "node": "26.x"
   },
   "dependencies": {
     "next": "^16.4.6",
