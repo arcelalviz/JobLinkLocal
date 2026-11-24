@@ -158,7 +158,7 @@ html .jl-login-password .eye-button:not(:disabled):active{transform:translateY(-
 /* Shrink flex/grid children before breaking text, including real data of arbitrary length. */
 :is(.pro-preview-job,.pro-panel-head,.pro-panel-footer,.pro-job-footer,.pro-business-card,.pro-process-step,.pro-value-strip .pro-container>div,.pro-section-heading,.pro-process-heading,.pro-hero-actions,.auth-header,.auth-art-top,.auth-art-bottom,.portal-option,.page-intro,.section-topline,.metric-top,.application-card-top,.review-main,.review-footer,.candidate-card,.candidate-main,.candidate-right,.detail-head,.profile-persona,.notification-item,.verification-head,.table-person,.analytics-line,.jl-ai-title,.jl-photo-actions,.toast,.dialog-actions)>:not(svg){min-width:0;max-width:100%}
 :is(.pro-preview-job,.pro-panel-footer,.pro-job-footer,.pro-job-company,.pro-job-location,.pro-value-strip .pro-container>div,.portal-option,.application-card-top,.review-main,.candidate-main,.notification-item,.verification-head,.table-person,.toast,.jl-ai-title,.detail-head,.profile-persona,.auth-service-list>div)>svg{flex-shrink:0}
-:is(.pro-preview-job>div,.jl-job-summary,.pro-job-footer>div,.pro-business-card,.pro-process-step,.portal-copy,.candidate-main>div:last-child,.review-main>div:nth-child(2),.application-card-top>div:nth-child(2),.profile-persona>div:nth-child(2),.notification-item>div:nth-child(2),.table-person>div,.toast-copy,.jl-ai-item,.jl-insight-card,.jl-account-popover){min-width:0;overflow-wrap:anywhere;word-break:normal}
+:is(.pro-preview-job>div,.jl-job-summary,.pro-job-footer>div,.pro-business-card,.pro-process-step,.portal-copy,.candidate-main>div:last-child,.review-main>div:nth-child(2),.application-card-top>div:nth-child(2),.profile-persona>div:nth-child(2),.notification-item>div:nth-child(2),.table-person>div,.toast-copy,.jl-ai-item,.jl-insight-card){min-width:0;overflow-wrap:anywhere;word-break:normal}
 :is(.pro-preview-job strong,.pro-preview-job>div>span,.pro-job-footer strong,.pro-job-footer span,.pro-business-card strong,.portal-copy strong,.portal-copy small,.metric-top,.metric-card small,.item-overline,.stage-badge,.status-chip,.count-indicator,.table-person strong,.table-person small,.toast-copy strong,.toast-copy small,.jl-photo-status,.jl-account-popover>strong,.jl-account-popover>small,.candidate-skills span){white-space:normal;overflow-wrap:anywhere;word-break:normal;line-height:1.45}
 :is(.pro-panel-footer,.pro-hero-actions,.pro-section-heading,.pro-process-heading,.page-intro,.section-topline,.review-footer,.detail-head,.profile-persona,.auth-header,.auth-art-top,.auth-art-bottom,.auth-alt,.jl-photo-actions,.analytics-line){flex-wrap:wrap;row-gap:10px}
 :is(.pro-panel-footer>a,.pro-job-footer>div,.page-intro>div:first-child,.section-topline>div:first-child,.detail-head>div:first-child){min-width:0;overflow-wrap:anywhere}
@@ -209,3 +209,18 @@ html :is(.review-description,.candidate-screening,.employer-note,.jl-match-expla
 :is(.detail-badges span,.jl-public-job-tags span,.jl-public-job-company)>svg{flex-shrink:0}
 :is(.job-detail-panel,.jl-public-job-card,.detail-section,.jl-public-job-section,.candidate-screening,.employer-note){overflow-wrap:anywhere;min-width:0}
 .pro-panel-footer>span{white-space:normal;overflow-wrap:anywhere;min-width:0}
+
+/* Account menu: size independently of its small avatar trigger. */
+.workspace .jl-topbar-account{flex:0 0 auto;overflow:visible}
+.workspace .jl-account-popover{box-sizing:border-box;width:min(272px,calc(100vw - 32px));min-width:0;max-width:calc(100vw - 32px);right:0;padding:14px;gap:6px;white-space:normal;overflow-wrap:normal;word-break:normal}
+.workspace .jl-account-popover>strong,.workspace .jl-account-popover>small{display:block;max-width:100%;overflow-wrap:anywhere;word-break:normal;line-height:1.45}
+.workspace .jl-account-popover>strong{font-size:15px}
+.workspace .jl-account-popover>small{margin-bottom:5px}
+.workspace .jl-account-popover>button{display:flex;align-items:center;justify-content:flex-start;flex:0 0 auto;width:100%;min-height:42px;gap:10px;padding:10px;white-space:nowrap;overflow-wrap:normal;word-break:normal;text-align:left}
+.workspace .jl-account-popover>button>svg{flex:0 0 auto}
+.workspace .jl-signout-confirm{min-width:0}
+.workspace .jl-signout-confirm p{overflow-wrap:break-word;word-break:normal}
+.workspace .jl-signout-confirm>div{display:flex;flex-wrap:wrap;gap:6px}
+.workspace .jl-signout-confirm button{white-space:nowrap;overflow-wrap:normal;word-break:normal;min-height:36px;justify-content:center}
+@media(max-width:640px){.workspace .jl-account-popover{right:0}}
+.workspace .topbar-right{margin-inline-start:auto}
