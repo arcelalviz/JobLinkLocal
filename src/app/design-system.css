@@ -140,3 +140,72 @@ html .jl-login-password .eye-button:not(:disabled):active{transform:translateY(-
 .jl-photo-crop{display:grid;grid-template-columns:minmax(100px,180px) minmax(0,1fr);align-items:center;gap:20px}.jl-photo-preview{position:relative;width:100%;aspect-ratio:1;overflow:hidden;border-radius:50%;background:var(--jl-panel);border:1px solid var(--jl-border)}.jl-photo-preview img{position:absolute;max-width:none!important;max-height:none!important;display:block;object-fit:fill}.jl-photo-controls{display:grid;gap:10px;min-width:0}.jl-photo-controls label{display:grid;gap:4px;font-size:12px;color:var(--jl-subtext)}.jl-photo-controls input[type=range]{width:100%;height:20px;min-height:0!important;padding:0!important;accent-color:#3282b8}.jl-photo-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.jl-photo-actions>span{font-size:12px}.jl-avatar-image{width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block}
 @media(max-width:560px){.jl-photo-editor{padding:13px}.jl-photo-crop{grid-template-columns:1fr}.jl-photo-preview{width:min(160px,100%);justify-self:center}}
 .jl-lgu-avatar-frame{display:grid;place-items:center;overflow:hidden;background:var(--jl-panel-muted);color:var(--jl-accent-text);font-weight:650;font-size:24px}
+
+/* Text layout: allow descriptions to grow, never stack visible page copies. */
+:where(.professional-site,.auth-shell,.workspace,.jl-public-job-card,.mfa-screen,.failure-content,.toast-stack,.modal-backdrop) :is(h1,h2,h3,h4,p,small,summary,legend,dt,dd){overflow-wrap:anywhere;word-break:normal}
+:where(.professional-site,.auth-shell,.workspace,.jl-public-job-card,.mfa-screen,.failure-content,.toast-stack,.modal-backdrop) :is(p,small,summary,dd){line-height:1.55}
+:where(.professional-site,.auth-shell,.workspace,.jl-public-job-card,.modal-backdrop) :is(h1,h2,h3,h4){line-height:1.25}
+/* Preserve deliberate large heading rhythm, without clipping descenders. */
+.pro-hero h1,.auth-art-main h2{line-height:1.13;overflow-wrap:anywhere}
+.jl-hero-title-wrap{display:block;overflow:visible;min-width:0}
+.jl-hero-title-wrap>h1{grid-area:auto;min-width:0}
+.workspace-content{display:block;min-width:0}
+.jl-workspace-stage{grid-area:auto;min-width:0;max-width:100%}
+/* End reveal animations without a permanent clipping mask. */
+@keyframes jl-reveal{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes jl-row-fade{from{opacity:0}to{opacity:1}}
+:is(.pro-job-grid,.pro-panel-body,.pro-business-grid,.pro-process-grid,.metrics-grid,.review-list,.jl-ai-grid,.jl-analytics-insights,.data-table tbody)>:nth-child(-n/**/+8){animation-name:jl-row-fade}
+/* Shrink flex/grid children before breaking text, including real data of arbitrary length. */
+:is(.pro-preview-job,.pro-panel-head,.pro-panel-footer,.pro-job-footer,.pro-business-card,.pro-process-step,.pro-value-strip .pro-container>div,.pro-section-heading,.pro-process-heading,.pro-hero-actions,.auth-header,.auth-art-top,.auth-art-bottom,.portal-option,.page-intro,.section-topline,.metric-top,.application-card-top,.review-main,.review-footer,.candidate-card,.candidate-main,.candidate-right,.detail-head,.profile-persona,.notification-item,.verification-head,.table-person,.analytics-line,.jl-ai-title,.jl-photo-actions,.toast,.dialog-actions)>:not(svg){min-width:0;max-width:100%}
+:is(.pro-preview-job,.pro-panel-footer,.pro-job-footer,.pro-job-company,.pro-job-location,.pro-value-strip .pro-container>div,.portal-option,.application-card-top,.review-main,.candidate-main,.notification-item,.verification-head,.table-person,.toast,.jl-ai-title,.detail-head,.profile-persona,.auth-service-list>div)>svg{flex-shrink:0}
+:is(.pro-preview-job>div,.jl-job-summary,.pro-job-footer>div,.pro-business-card,.pro-process-step,.portal-copy,.candidate-main>div:last-child,.review-main>div:nth-child(2),.application-card-top>div:nth-child(2),.profile-persona>div:nth-child(2),.notification-item>div:nth-child(2),.table-person>div,.toast-copy,.jl-ai-item,.jl-insight-card,.jl-account-popover){min-width:0;overflow-wrap:anywhere;word-break:normal}
+:is(.pro-preview-job strong,.pro-preview-job>div>span,.pro-job-footer strong,.pro-job-footer span,.pro-business-card strong,.portal-copy strong,.portal-copy small,.metric-top,.metric-card small,.item-overline,.stage-badge,.status-chip,.count-indicator,.table-person strong,.table-person small,.toast-copy strong,.toast-copy small,.jl-photo-status,.jl-account-popover>strong,.jl-account-popover>small,.candidate-skills span){white-space:normal;overflow-wrap:anywhere;word-break:normal;line-height:1.45}
+:is(.pro-panel-footer,.pro-hero-actions,.pro-section-heading,.pro-process-heading,.page-intro,.section-topline,.review-footer,.detail-head,.profile-persona,.auth-header,.auth-art-top,.auth-art-bottom,.auth-alt,.jl-photo-actions,.analytics-line){flex-wrap:wrap;row-gap:10px}
+:is(.pro-panel-footer>a,.pro-job-footer>div,.page-intro>div:first-child,.section-topline>div:first-child,.detail-head>div:first-child){min-width:0;overflow-wrap:anywhere}
+.pro-preview-job>div{flex:1 1 0;min-width:0}.pro-preview-company,.pro-preview-arrow,.pro-job-action,.application-logo,.review-symbol,.candidate-avatar,.large-avatar,.table-avatar,.toast-icon,.toast-close,.verification-head-icon{flex-shrink:0}
+/* Put the login selection marker in its own grid cell, never over the description. */
+.auth-shell .portal-option{display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:'symbol mark' 'copy copy';height:auto;align-content:start;align-items:start;gap:8px 10px}
+.auth-shell .portal-option .portal-symbol{grid-area:symbol;flex:none}
+.auth-shell .portal-option .portal-copy{grid-area:copy;min-width:0;gap:5px}
+.auth-shell .portal-option .portal-check{grid-area:mark;position:static;justify-self:end;align-self:start}
+.auth-shell .portal-copy small{font-size:12px;line-height:1.5}
+/* Readable multi-paragraph descriptions, including employer and LGU details. */
+html :is(.detail-section,.jl-public-job-section,.jl-job-review-details) p{display:block;white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;line-height:1.7;max-width:100%;margin:0}
+html :is(.detail-section,.jl-public-job-section) :is(h2,h4){margin:0 0 10px;line-height:1.3}
+html :is(.review-description,.candidate-screening,.employer-note,.jl-match-explanation,.jl-ai-foot,.form-hint,.form-note,.privacy-note,.verification-help) {white-space:normal;overflow-wrap:anywhere;line-height:1.6;min-width:0}
+.form-note{margin-top:0}
+/* Percent tracks previously totaled 100% before adding the gap. */
+.job-browser{grid-template-columns:minmax(0,39fr) minmax(0,61fr)}
+.job-browser-list,.job-detail-panel,.browse-job-card{min-width:0;max-width:100%}
+.job-browser-list>.browse-job-card{flex-shrink:0}
+.profile-layout{grid-template-columns:repeat(2,minmax(0,1fr))}
+.form-two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.form-three{grid-template-columns:repeat(3,minmax(0,1fr))}
+:is(.form-panel,.form-stack,.form-field,.input-wrap,.form-two,.form-three,.report-toolbar,.jl-filter-controls,.verification-help,.panel-stack){min-width:0;max-width:100%}
+:is(.form-field,.filter-control,.job-search,.pro-search) :is(input,textarea,select){min-width:0;max-width:100%}
+.form-field textarea{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.6;resize:vertical}
+.job-search{min-width:min(260px,100%)}
+.filter-control{min-width:0;max-width:100%}
+.candidate-card{flex-wrap:wrap;align-items:flex-start}
+.candidate-main{flex:1 1 280px;min-width:0}.candidate-main>div:last-child{flex:1 1 0}.candidate-right{flex:0 1 auto;max-width:100%;min-width:0}
+:is(.application-card-top,.review-main,.profile-persona,.notification-item)>div:nth-child(2){flex:1 1 160px;min-width:0}
+:is(.application-card-top,.review-main,.notification-item,.verification-head){flex-wrap:wrap;align-items:flex-start}
+:is(.application-card-top,.review-main,.notification-item,.candidate-main) p{overflow-wrap:anywhere;min-width:0;line-height:1.55}
+.application-card-top p,.browse-job-card>p,.record-card p,.employer-job-card p{flex-wrap:wrap;align-items:center}
+:is(.record-card,.employer-job-card,.saved-card,.metric-card,.jl-ai-item,.jl-insight-card,.review-card,.application-card,.notification-item){min-width:0;height:auto;overflow-wrap:anywhere}
+:is(.review-files>a,.review-files>button,.doc-delete,.text-action,.btn,.pro-button){max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.4}
+.table-scroll{min-width:0;max-width:100%;overflow-x:auto}
+.data-table :is(td,th){white-space:normal;overflow-wrap:anywhere;word-break:normal;line-height:1.5}
+/* Reserve room for the absolute close button, without squeezing the body. */
+:is(.form-modal,.confirm-panel) > :is(h2,.eyebrow,.dialog-eyebrow):not(.register-section-title){padding-inline-end:42px;overflow-wrap:anywhere}
+.toast-copy{flex:1 1 0;min-width:0;line-height:1.5}
+.toast{align-items:flex-start;height:auto}
+.toast-stack{max-height:calc(100dvh - 44px);overflow-y:auto}
+@media(max-width:1200px){.job-browser{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr)}}
+@media(max-width:980px){.job-browser{grid-template-columns:minmax(0,1fr)}.auth-shell .portal-option{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:'symbol copy mark';align-items:center;min-height:0}.auth-shell .portal-select{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:720px){.profile-layout,.form-two,.form-three{grid-template-columns:minmax(0,1fr)}.candidate-main{flex-basis:100%}.candidate-right{width:100%;align-items:flex-start}.report-toolbar .form-field,.jl-filter-controls .form-field{min-width:min(140px,100%)}.auth-shell .auth-main{min-width:0}.auth-shell .auth-content{min-width:0}.verification-head{gap:14px}}
+@media(max-width:520px){.auth-shell .portal-option{gap:8px}.workspace .metrics-grid{grid-template-columns:repeat(auto-fit,minmax(min(135px,100%),1fr))}.pro-hero h1{line-height:1.16}.form-modal,.confirm-panel{padding:22px 16px}.dialog-close{right:12px;top:12px}.toast-copy small{font-size:12px}}
+:is(.eyebrow,.detail-badges span,.browse-meta span,.jl-public-job-tags span,.jl-public-job-company,.jl-public-job-salary span,.pro-job-work,.item-timestamp,.auth-role-help){min-width:0;max-width:100%;overflow-wrap:anywhere;white-space:normal;line-height:1.5}
+:is(.detail-badges span,.jl-public-job-tags span,.jl-public-job-company)>svg{flex-shrink:0}
+:is(.job-detail-panel,.jl-public-job-card,.detail-section,.jl-public-job-section,.candidate-screening,.employer-note){overflow-wrap:anywhere;min-width:0}
+.pro-panel-footer>span{white-space:normal;overflow-wrap:anywhere;min-width:0}
