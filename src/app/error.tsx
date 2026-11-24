@@ -1,7 +1,9 @@
 'use client';
 import Link from 'next/link';
-import { AlertCircle, ArrowUpRight } from 'lucide-react';
+import { useEffect } from 'react';
+import { AlertCircle } from 'lucide-react';
 
-export default function ErrorPage({reset}:{error:Error & {digest?:string};reset:()=>void}){
- return <main className="failure-page"><div className="failure-content"><span className="eyebrow dark-eyebrow">SOMETHING INTERRUPTED THE JOURNEY</span><AlertCircle size={52} color="#9d6655"/><h1>A little detour.<br/><em>Nothing more.</em></h1><p>The page couldn't load just now. Your account and saved records are not intentionally changed.</p><button className="btn btn-ink" onClick={reset}>Try again <ArrowUpRight size={17}/></button><Link href="/" className="text-action">Return home</Link></div></main>;
+export default function ErrorPage({error,reset}:{error:Error & {digest?:string};reset:()=>void}){
+ useEffect(()=>{console.error('[JobLinkLocal page error]',{name:error.name,message:error.message,digest:error.digest});},[error]);
+ return <main className="failure-page"><div className="failure-content"><span className="eyebrow dark-eyebrow">PAGE UNAVAILABLE</span><AlertCircle size={36}/><h1>Unable to load this page.</h1><p>Try again. If the issue continues, report the error to the site administrator.</p>{error.digest&&<p>Error reference: <code>{error.digest}</code></p>}<button type="button" className="btn btn-ink" onClick={reset}>Try again</button> <button type="button" className="btn btn-outline" onClick={()=>window.location.reload()}>Reload page</button> <Link href="/" className="text-action">Return home</Link></div></main>;
 }

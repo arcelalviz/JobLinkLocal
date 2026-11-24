@@ -17,6 +17,9 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { createBrowserClient } from '@supabase/ssr';
 import { ManilaClock } from '@/components/ManilaClock';
 import { RoleAIInsights } from '@/components/RoleAIInsights';
+import { WorkspacePanelBoundary } from '@/components/WorkspacePanelBoundary';
+import { isWorkspaceProfile, isRecord } from '@/lib/workspace-data';
+import { HttpError } from '@/lib/http';
 
 const tabDefinitions=[
  {id:'overview',label:'Overview',icon:Grid2X2,roles:['jobseeker','employer','lgu_admin','sys_admin']},
@@ -53,6 +56,8 @@ export function Workspace(){
  const toast=useToast();
  const [me,setMe]=useState<Profile|null>(null);
  const [loading,setLoading]=useState(true);
+ const [loadError,setLoadError]=useState('');
+ const [loadAttempt,setLoadAttempt]=useState(0);
  const [tab,setTab]=useState('overview');
  const [menu,setMenu]=useState(false);
  const [accountMenu,setAccountMenu]=useState(false);
@@ -70,16 +75,29 @@ export function Workspace(){
  const seenNotifications=useRef<Set<string>|null>(null);
  const bump=()=>setRefresh(x=>x+1);
  useEffect(()=>{
-   const query=new URLSearchParams(window.location.search);
-   setTab(query.get('tab')||'overview');
-   request<Profile>('me').then(setMe).catch(e=>{
-     toast.show(e instanceof Error?e.message:'Please sign in.','error');router.replace('/login');
-   }).finally(()=>setLoading(false));
- },[router,toast]);
+   let active=true;
+   setLoading(true);setLoadError('');
+   request<unknown>('me').then(value=>{
+     if(!active)return;
+     if(!isWorkspaceProfile(value))throw new Error('The server returned an invalid account profile.');
+     setMe(value);
+   }).catch(error=>{
+     if(!active)return;
+     if(error instanceof HttpError && error.status===401){router.replace('/login');return;}
+     console.error('[JobLinkLocal workspace profile]',{name:error instanceof Error?error.name:'Unknown',status:error instanceof HttpError?error.status:undefined,message:error instanceof Error?error.message:'Unknown error'});
+     setLoadError(error instanceof Error?error.message:'Unable to load your profile.');
+   }).finally(()=>{if(active)setLoading(false);});
+   return ()=>{active=false;};
+ },[router,loadAttempt]);
  useEffect(()=>{
    if(!me)return;
    let active=true;
-   const poll=()=>request<any>('dashboard').then(v=>{if(active){setUnread(v.unread||0);if(v.profile?.lgu_status)setMe(current=>current&&current.lgu_status!==v.profile.lgu_status?{...current,lgu_status:v.profile.lgu_status}:current);}}).catch(()=>{});
+   const poll=()=>request<unknown>('dashboard').then(v=>{
+    if(!active||!isRecord(v))return;
+    setUnread(typeof v.unread==='number'?v.unread:0);
+    const status=isRecord(v.profile)?v.profile.lgu_status:undefined;
+    if(status==='pending'||status==='approved'||status==='rejected'||status==='suspended')setMe(current=>current&&current.lgu_status!==status?{...current,lgu_status:status}:current);
+   }).catch(()=>{});
    poll();const interval=setInterval(poll,15000);
    return ()=>{active=false;clearInterval(interval);};
  },[me,refresh]);
@@ -104,21 +122,25 @@ export function Workspace(){
  },[me,toast]);
  useEffect(() => {
    if (!me || !process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY) return;
-   const browser = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
-   const channel = browser.channel(`private-notifications-${me.id}`)
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${me.id}` }, payload => {
-      const incoming = payload.new as { id?: string; title?: string; body?: string };
-      if (!incoming.id) return;
-      if (seenNotifications.current?.has(incoming.id)) return;
-      seenNotifications.current?.add(incoming.id);
-      setUnread(count => count + 1);
-      toast.show(incoming.title || 'New update', 'info', incoming.body || 'Check your notifications.');
-    }).subscribe();
-   return () => { void browser.removeChannel(channel); };
+   try {
+    const browser = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+    const channel = browser.channel(`private-notifications-${me.id}`)
+     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${me.id}` }, payload => {
+       const incoming = payload.new as { id?: string; title?: string; body?: string };
+       if (!incoming.id) return;
+       if (seenNotifications.current?.has(incoming.id)) return;
+       seenNotifications.current?.add(incoming.id);
+       setUnread(count => count + 1);
+       toast.show(incoming.title || 'New update', 'info', incoming.body || 'Check your notifications.');
+     }).subscribe();
+    return () => { void browser.removeChannel(channel).catch(()=>{}); };
+   } catch (error) {
+    console.warn('[JobLinkLocal realtime] Live notification connection could not start. Polling remains enabled.');
+   }
  }, [me, toast]);
  const navigate=(id:string)=>{setTab(id);setMenu(false);if(window.location.search!==`?tab=${encodeURIComponent(id)}`)window.history.pushState(null,'',`/app?tab=${encodeURIComponent(id)}`);};
  // Next.js Link navigation, native history updates, and browser Back/Forward all sync the active panel.
- useEffect(()=>{const requested=searchParams.get('tab')||'overview';setTab(previous=>previous===requested?previous:requested);setMenu(false);},[searchParams]);
+ useEffect(()=>{const requested=searchParams?.get('tab')||'overview';setTab(previous=>previous===requested?previous:requested);setMenu(false);},[searchParams]);
  useEffect(()=>{const handleBack=()=>{const value=new URLSearchParams(window.location.search).get('tab')||'overview';setTab(value);setMenu(false);};window.addEventListener('popstate',handleBack);return ()=>window.removeEventListener('popstate',handleBack);},[]);
  const logout=async()=>{
    try{await request('auth/logout','POST');toast.show('Signed out.','success');router.replace('/');router.refresh();}
@@ -128,7 +150,7 @@ export function Workspace(){
  const tabs=useMemo(()=>tabDefinitions.filter(i=>role&&i.roles.includes(role)),[role]);
  useEffect(()=>{if(role&&!tabs.some(t=>t.id===tab))navigate('overview');},[role,tabs,tab]);
  if(loading)return <div className="workspace-loading" role="status" aria-live="polite"><div className="loader-logo"><BriefcaseBusiness size={48}/></div><span>Loading your workspace…</span></div>;
- if(!me)return null;
+ if(loadError||!isWorkspaceProfile(me))return <main className="workspace-loading" role="alert"><h1>Unable to open your workspace</h1><p>{loadError||'Your account profile is not available yet.'}</p><button type="button" className="btn btn-ink" onClick={()=>setLoadAttempt(v=>v+1)}>Retry workspace</button><Link className="text-action" href="/login">Return to sign in</Link></main>;
  const active=tabs.find(t=>t.id===tab);
  const date=new Intl.DateTimeFormat('en-PH',{dateStyle:'full',timeZone:'Asia/Manila'}).format(new Date());
  return <div className={`workspace role-${me.role}`}>
@@ -148,11 +170,13 @@ export function Workspace(){
    <header className="workspace-topbar"><button className="mobile-menu-button" onClick={()=>setMenu(true)} aria-label="Open navigation"><Menu size={22}/></button><span className="breadcrumb">WORKSPACE</span><div className="topbar-right"><span className="topbar-date">{date}</span><ManilaClock/><div className="jl-theme-in-header"><ThemeToggle/></div><button className="notification-trigger" onClick={()=>navigate('notifications')} aria-label="Notifications"><Bell size={20}/>{unread>0&&<span className="notification-indicator"/>}</button><div className="jl-topbar-account" ref={accountRef}><button type="button" className="profile-avatar" onClick={()=>{setAccountMenu(v=>!v);setConfirmLogout(false);}} aria-label="Account menu" aria-expanded={accountMenu}><ProfileAvatar person={me}/></button><AnimatePresence>{accountMenu&&<motion.div className="jl-account-popover" initial={{opacity:0,scale:.95,y:-6}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:.95,y:-6,transition:{duration:.16,ease:"easeIn"}}}><strong>{me.full_name}</strong><small>{roleNames[me.role]}</small><button type="button" onClick={()=>{navigate('profile');setAccountMenu(false);}}><UserRound size={16}/> My profile</button>{confirmLogout?<div className="jl-signout-confirm"><p>Are you sure you want to sign out?</p><div><button type="button" onClick={()=>setConfirmLogout(false)}>Cancel</button><button type="button" onClick={()=>{setAccountMenu(false);setConfirmLogout(false);void logout();}}>Sign out</button></div></div>:<button type="button" onClick={()=>setConfirmLogout(true)}><LogOut size={16}/> Sign out</button>}</motion.div>}</AnimatePresence></div></div></header>
    <div className="workspace-content"><AnimatePresence mode="wait"><WorkspaceStage key={tab}>
     <div className="page-intro"><div><p className="eyebrow dark-eyebrow">{roleNames[me.role]}</p><h1>{tab==='overview'?'Dashboard':active?.label||'Dashboard'}</h1></div><div className={`status-chip status-${me.lgu_status}`}><span/>{me.lgu_status==='approved'?'LGU verified':me.lgu_status==='pending'?'Awaiting LGU approval':me.lgu_status==='rejected'?'Needs resubmission':'Account suspended'}</div></div>
+    <WorkspacePanelBoundary key={tab} section={tab}>
     {tab==='overview'&&<Overview role={me.role} me={me} navigate={navigate} refresh={refresh}/>}
     {['discover','applications','saved'].includes(tab)&&<SeekerPanels tab={tab} me={me} refresh={refresh} bump={bump}/>}
     {['jobs','candidates'].includes(tab)&&<EmployerPanels tab={tab} me={me} refresh={refresh} bump={bump}/>}
     {['reviews','postings','review-history','all-jobs','jobseekers','resume-removals','tracking','users','audit','reports'].includes(tab)&&<AdminPanels tab={tab} me={me} refresh={refresh} bump={bump}/>}
     {['profile','verification','notifications'].includes(tab)&&<AccountPanels tab={tab} me={me} refresh={refresh} bump={bump} updateMe={setMe}/>}
+    </WorkspacePanelBoundary>
    </WorkspaceStage></AnimatePresence></div>
   </div>
 
@@ -164,7 +188,7 @@ function Overview({role,me,navigate,refresh}:{role:Role;me:Profile;navigate:(tab
  const [error,setError]=useState('');
  const [reload,setReload]=useState(0);
  useEffect(()=>{let active=true;setError('');request('dashboard').then(value=>{if(active)setData(value);}).catch(reason=>{if(active)setError(reason instanceof Error?reason.message:'Dashboard unavailable.');});return()=>{active=false;};},[refresh,reload]);
- const stats=data?.stats||{};
+ const stats=isRecord(data?.stats)?data.stats:{};
  const copy:Record<Role,{one:string;action:string;tab:string}>={
    jobseeker:{one:'Job search',action:'Browse jobs',tab:'discover'},
    employer:{one:'Recruitment',action:'My job posts',tab:'jobs'},
@@ -175,7 +199,7 @@ function Overview({role,me,navigate,refresh}:{role:Role;me:Profile;navigate:(tab
    {error&&<div className="jl-data-error" role="alert"><span>{error}</span><button type="button" className="btn btn-outline btn-small" onClick={()=>setReload(v=>v+1)}>Retry dashboard</button></div>}
    <div className="metrics-grid">{Object.entries(stats).slice(0,4).map(([key,value])=>{const target=role==='jobseeker'?(key==='applications'?'applications':key==='saved'?'saved':'discover'):role==='employer'?(key==='applicants'?'candidates':'jobs'):role==='lgu_admin'?(key==='pending_reviews'?'reviews':key==='jobseekers'?'jobseekers':key==='jobs'?'all-jobs':key==='applications'?'tracking':'reports'):key==='users'?'users':key==='jobs'?'all-jobs':'reports';return role==='employer'&&key==='jobseekers'?<div className="metric-card" key={key}><span className="metric-top">Total registered jobseekers</span><strong>{String(value)}</strong><small>Platform-wide account count</small></div>:<button type="button" className="metric-card metric-action" onClick={()=>navigate(target)} key={key}><span className="metric-top"><span>{key.replace(/_/g,' ')}</span><Activity size={16}/></span><strong>{String(value)}</strong><small>Open <ArrowUpRight size={13}/></small></button>;})}{!Object.keys(stats).length&&[1,2,3].map(i=><div className="metric-card" key={i}><span className="metric-top">LOADING</span><strong>—</strong><small>Loading dashboard data</small></div>)}</div>
    <div className="overview-spotlight"><div className="spotlight-copy"><h2>{copy[role].one}</h2><button onClick={()=>navigate(copy[role].tab)} className="btn btn-lime">{copy[role].action} <ArrowUpRight size={18}/></button></div></div>
-   <RoleAIInsights role={role} navigate={navigate}/>
+   <WorkspacePanelBoundary section="AI insights"><RoleAIInsights role={role} navigate={navigate}/></WorkspacePanelBoundary>
    {me.lgu_status!=='approved'&&['jobseeker','employer'].includes(role)&&<div className="approval-banner"><ShieldCheck size={22}/><div><strong>{me.lgu_status==='rejected'?'Your documents need a new review.':'Your account needs LGU verification.'}</strong><p>Submit your credentials to unlock job applications and employer posting.</p></div><button onClick={()=>navigate('verification')}>Start verification <ArrowUpRight size={17}/></button></div>}
    
  </div>;

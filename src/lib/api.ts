@@ -10,6 +10,7 @@ import { matchJobSkills, normalizeSkills } from '@/lib/skillMatching';
 import { signUpSchema, jobSchema, applicationSchema, decisionSchema, validated } from '@/lib/validators';
 import { reportData, csvReport, pdfReport } from '@/lib/report';
 import { isOlongapoBarangay } from '@/lib/olongapo';
+import { generateSummary, SummaryError } from '@/lib/ai-summary';
 
 const db=()=>adminClient();
 const isUuid=(id:string)=>z.uuid().safeParse(id).success;
@@ -749,7 +750,7 @@ export async function api(req:NextRequest,parts:string[]) {
  if(routeIs(parts,'ai','explain')&&method==='POST') {
    const {user,profile}=await currentUser();
    await checkLimit(req,`ai_explain_${user.id}`,8,3600);
-   const key=process.env.OPENAI_API_KEY;
+   const key=process.env.OPENAI_API_KEY?.trim();
    if(!key)fail('AI summaries are not configured. Built-in skill matching and analytics are still available.',503);
    let metrics:Record<string,number>={};
    // Transmit only role-level counts, no names, identities, resumes, addresses, or credentials.
@@ -771,16 +772,12 @@ export async function api(req:NextRequest,parts:string[]) {
      const {count:apps}=await db().from('applications').select('id',{head:true,count:'exact'});
      metrics={total_accounts:accounts||0,total_applications:apps||0};
    }
-   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);
+   let answer:string;
    try{
-     const result=await fetch('https://api.openai.com/v1/responses',{method:'POST',signal:controller.signal,headers:{'Authorization':`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model:process.env.OPENAI_MODEL||'gpt-5-mini',store:false,max_output_tokens:180,instructions:'You analyze aggregated metrics for an Olongapo employment application. Respond with two short factual sentences in clear English. Use ONLY the supplied counts, do not invent trends or qualifications. Never recommend automated acceptance, rejection, account suspension, or hiring. Do not infer protected traits or individual competence.',input:JSON.stringify({role:profile.role,metrics})})});
-     if(!result.ok)fail('AI summary service unavailable. Use the built-in insights instead.',503);
-     const data=await result.json();
-     const answer=(data.output||[]).flatMap((item:any)=>item.content||[]).filter((part:any)=>part.type==='output_text').map((part:any)=>part.text).join(' ').trim();
-     if(!answer)fail('The AI summary could not be completed.',503);
-     await recordAudit(user.id,'ai.summary_generated',undefined,{role:profile.role});
-     return ok({text:answer.slice(0,1000),method:'External AI summary of aggregated counts',metrics});
-   }catch(error){if(error instanceof ApiError)throw error;fail('AI summary is temporarily unavailable.',503);}finally{clearTimeout(timer);}
+     answer=await generateSummary(key,process.env.OPENAI_MODEL?.trim()||'gpt-6.1-terra',profile.role,metrics);
+   }catch(error){if(error instanceof SummaryError)fail(error.message,503);throw error;}
+   await recordAudit(user.id,'ai.summary_generated',undefined,{role:profile.role});
+   return ok({text:answer,method:'External AI summary of aggregated counts',metrics});
  }
  if(routeIs(parts,'ai','insights')&&method==='GET') {
    const {user,profile}=await currentUser();

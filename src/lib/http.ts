@@ -1,6 +1,10 @@
 import type { ApiResponse } from '@/types';
 import { createBrowserClient } from '@supabase/ssr';
 
+export class HttpError extends Error {
+ constructor(public readonly status:number,message:string){super(message);this.name='HttpError';}
+}
+
 export async function fetchWithSessionRetry(input:string,options:RequestInit={}):Promise<Response> {
  let response=await fetch(input,options);
  if(response.status!==401 || typeof window==='undefined' ||
@@ -21,8 +25,9 @@ export async function request<T=any>(path:string,method='GET',body?:unknown):Pro
  let response:Response;
  try { response=await fetchWithSessionRetry('/api/'+path.replace(/^\//,''),options); }
  catch { throw new Error('Connection interrupted. Check your internet connection.'); }
- const result=await response.json().catch(()=>({error:'Unexpected server response.'})) as ApiResponse<T>;
- if(!response.ok) throw new Error(response.status===413?'Request is too large. Select a smaller file or try again using the updated uploader.':response.status===401?'Your session expired. Sign in again to upload or update files.':result.error||'The request could not be completed.');
+ const result=await response.json().catch(()=>null) as ApiResponse<T>|null;
+ if(!response.ok) throw new HttpError(response.status,response.status===413?'Request is too large. Select a smaller file or try again using the updated uploader.':response.status===401?'Your session expired. Sign in again to upload or update files.':result?.error||'The request could not be completed.');
+ if(!result||!Object.prototype.hasOwnProperty.call(result,'data'))throw new HttpError(502,'Unexpected server response. Please try again.');
  return result.data as T;
 }
 
