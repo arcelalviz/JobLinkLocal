@@ -7,6 +7,7 @@ import './professional.css';
 import './palette.css';
 import './theme-dark.css';
 import './design-system.css';
+import './responsive.css';
 
 export const metadata:Metadata={
  title:{default:'JobLinkLocal — Olongapo City Jobs',template:'%s · JobLinkLocal'},

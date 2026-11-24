@@ -57,6 +57,7 @@ export function Landing() {
           <a href="#opportunities" onClick={() => setMenu(false)}>Explore jobs</a>
           <a href="#how-it-works" onClick={() => setMenu(false)}>How it works</a>
           <a href="#business-directory" onClick={() => setMenu(false)}>Verified businesses</a><a href="#employers" onClick={() => setMenu(false)}>For employers</a>
+          <Link href="/register" className="jl-mobile-register" onClick={() => setMenu(false)}>Create account <ArrowUpRight size={16}/></Link>
         </nav>
         <div className="pro-header-actions"><Link href="/login" className="pro-link">Sign in</Link><Link href="/register" className="pro-button pro-button-primary pro-header-cta">Create account <ArrowUpRight size={16}/></Link></div>
         <button type="button" className="pro-menu-button" aria-label={menu ? 'Close navigation' : 'Open navigation'} aria-expanded={menu} onClick={() => setMenu(v => !v)}>{menu ? <X size={22}/> : <Menu size={22}/>}</button>
