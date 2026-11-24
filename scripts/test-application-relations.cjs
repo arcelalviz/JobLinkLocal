@@ -1,0 +1,27 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+const ts = require('typescript');
+const root = path.resolve(__dirname, '..');
+const source = fs.readFileSync(path.join(root, 'src/lib/application-relations.ts'), 'utf8');
+const exportsObject = {};
+vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports: exportsObject });
+const { relationRows, normalizeApplicationRelations } = exportsObject;
+const emp = { id: 'emp-1', status: 'active', started_on: '2026-11-24', hire_note: 'Hired' };
+const ended = { id: 'emp-2', status: 'ended', ended_on: '2026-11-25', end_note: 'Completed' };
+const event = { id: 'event-1', status: 'hired', note: 'Recorded' };
+const same = (a, b) => assert.deepEqual(JSON.parse(JSON.stringify(a)), b);
+let count = 0;
+function test(name, fn) { fn(); count++; console.log('PASS ' + name); }
+test('One-to-one object becomes one row and retains details', () => same(relationRows(emp), [emp]));
+test('Array of records retains all rows in order', () => same(relationRows([emp, ended]), [emp, ended]));
+test('Ended employment preserves status and notes', () => same(relationRows(ended), [ended]));
+test('Null and missing relationship become empty arrays', () => { same(relationRows(null), []); same(relationRows(undefined), []); });
+test('Empty array stays empty', () => same(relationRows([]), []));
+test('Invalid primitive and malformed rows do not reach renderer', () => { for (const value of [false, 0, 'bad', {}, { id: '' }, { id: 12 }]) same(relationRows(value), []); same(relationRows([null, emp, 2, {}]), [emp]); });
+test('Application status, job and related data remain intact', () => { const app = { id: 'app-1', status: 'hired', jobs: { title: 'Test position' }, employment_records: emp, application_events: [event] }; same(normalizeApplicationRelations(app), { ...app, employment_records: [emp] }); assert.equal(app.employment_records, emp); });
+test('Application with no hire or history is safe', () => same(normalizeApplicationRelations({ id: 'app-2', status: 'applied', employment_records: null, application_events: null }), { id: 'app-2', status: 'applied', employment_records: [], application_events: [] }));
+test('Single activity event normalizes defensively', () => same(normalizeApplicationRelations({ application_events: event }).application_events, [event]));
+test('API and both jobseeker render paths use the normalizer', () => { const api = fs.readFileSync(path.join(root, 'src/lib/api.ts'), 'utf8'); const ui = fs.readFileSync(path.join(root, 'src/components/SeekerPanels.tsx'), 'utf8'); assert.ok(api.includes('map(application=>normalizeApplicationRelations(application))')); assert.ok(ui.includes('relationRows(a.employment_records).map(')); assert.ok(ui.includes('relationRows(inspectApplication.application_events).map(')); });
+console.log(`${count}/${count} application relationship checks passed.`);

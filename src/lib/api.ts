@@ -11,6 +11,7 @@ import { signUpSchema, jobSchema, applicationSchema, decisionSchema, validated }
 import { reportData, csvReport, pdfReport } from '@/lib/report';
 import { isOlongapoBarangay } from '@/lib/olongapo';
 import { generateSummary, SummaryError } from '@/lib/ai-summary';
+import { normalizeApplicationRelations } from '@/lib/application-relations';
 
 const db=()=>adminClient();
 const isUuid=(id:string)=>z.uuid().safeParse(id).success;
@@ -487,7 +488,7 @@ export async function api(req:NextRequest,parts:string[]) {
    const {user}=await currentUser(['jobseeker']);
    const {data,error}=await db().from('applications').select('*,jobs(id,title,company_name,location,employment_type,work_setup),employment_records(id,status,started_on,ended_on,hire_note,end_note),application_events(id,status,note,created_at)').eq('seeker_id',user.id).order('created_at',{ascending:false});
    dbError(error,'Could not load applications.');
-   return ok(data||[]);
+   return ok((data||[]).map(application=>normalizeApplicationRelations(application)));
  }
 
  if(routeIs(parts,'applications')&&method==='POST') {
