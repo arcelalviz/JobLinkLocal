@@ -34,6 +34,12 @@ function factSentence(fact:string):string {
   case 'Pending job reviews':return `${n} job ${plural('posting')} ${n===1?'is':'are'} awaiting review.`;
   case 'Registered accounts':return `The platform has ${n} registered ${plural('account')}.`;
   case 'Total applications':return `The platform has recorded ${n} job ${plural('application')}.`;
+  case 'Report applications':return `The selected period recorded ${n} job ${plural('application')}.`;
+  case 'Report job postings':return `${n} job ${plural('posting')} ${n===1?'was':'were'} created during the selected period.`;
+  case 'Report employment records':return `${n} employment ${plural('record')} ${n===1?'was':'were'} created during the selected period.`;
+  case 'Report verification submissions':return `${n} verification ${plural('submission')} ${n===1?'was':'were'} received during the selected period.`;
+  case 'Report approved submissions':return `Of the submissions received in the selected period, ${n} ${n===1?'has':'have'} approved status.`;
+  case 'Report new accounts':return `${n} new ${plural('account')} ${n===1?'was':'were'} registered during the selected period.`;
   default:throw new Error('Unknown summary fact.');
  }
 }

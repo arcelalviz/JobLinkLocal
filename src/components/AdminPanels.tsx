@@ -8,6 +8,7 @@ import type { Profile } from '@/types';
 import { manilaTimestamp } from '@/lib/olongapo';
 import { PrivateFileViewer } from '@/components/PrivateFileViewer';
 import { ProfileAvatar } from '@/components/ProfilePhoto';
+import { ReportAIInsights } from '@/components/ReportAIInsights';
 
 const nice=(s:string)=>s.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 const seekerDetails=(person:any)=>Array.isArray(person?.seeker_profiles)?person.seeker_profiles[0]||{}:person?.seeker_profiles||{};
@@ -107,6 +108,7 @@ export function AdminPanels({tab,me,refresh,bump}:{tab:string;me:Profile;refresh
    <div className="section-topline"><div><h2>Data insights</h2></div></div>
    <p className="jl-analytics-disclaimer">These insights use explainable statistical rules, not a generative AI model. They do not score individual applicants or make hiring decisions.</p>
    <div className="jl-analytics-insights">{(report.insights||[]).map((item:any)=><div className="jl-insight-card" data-level={item.level} key={item.id}><h3>{item.title}</h3><strong>{item.value}</strong><p>{item.detail}</p><details><summary>How this was calculated</summary><p>{item.basis}</p></details></div>)}</div>
+   <ReportAIInsights key={JSON.stringify([report.since,report.until,report.granularity,report.generatedAt,report.summary,report.truncated])} report={report}/>
    <div className="analytics-grid"><div className="analytics-chart"><div className="chart-head jl-chart-head"><div><h3>Activity over time</h3><span>{report.granularity.toUpperCase()} · ASIA/MANILA · {report.since} to {report.until}</span></div><button type="button" className="btn btn-outline btn-small" onClick={()=>setShowSummary(true)}>View summary <ArrowUpRight size={15}/></button></div>
    {<div className="jl-activity-period-row"><div className="jl-activity-period-toggle" role="group" aria-label="Activity over time period">
     {([['day','Daily'],['week','Weekly'],['month','Monthly']] as const).map(([value,label])=><button key={value} type="button" aria-pressed={report.granularity===value} onClick={()=>changeSystemChartPeriod(value)}>{label}</button>)}
