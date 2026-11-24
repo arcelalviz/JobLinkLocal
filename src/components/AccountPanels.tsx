@@ -1,5 +1,6 @@
 'use client';
-import { useEffect,useState } from 'react';
+import { useEffect,useRef,useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { ArrowUpRight, Check, FileText, UploadCloud, ShieldCheck, Bell, BellOff, Inbox, UserRound, BriefcaseBusiness, ExternalLink, Clock3, CircleCheck, AlertCircle, X } from 'lucide-react';
 import { request } from '@/lib/http';
 import { submitDocuments } from '@/lib/document-upload';
@@ -16,6 +17,8 @@ const val=(v:any)=>Array.isArray(v)?v[0]||{}:v||{};
 
 export function AccountPanels({tab,me,refresh,bump,updateMe}:{tab:string;me:Profile;refresh:number;bump:()=>void;updateMe:(p:Profile)=>void}){
  const toast=useToast();
+ const router=useRouter();
+ const openingNotification=useRef(false);
  const [data,setData]=useState<any[]>([]);
  const [busy,setBusy]=useState(false);
  const [uploadProgress,setUploadProgress]=useState('');
@@ -74,8 +77,29 @@ export function AccountPanels({tab,me,refresh,bump,updateMe}:{tab:string;me:Prof
  const reloadDocuments=()=>request<any[]>('verification').then(setData).catch(err=>toast.show(err instanceof Error?err.message:'Unable to refresh documents.','error'));
  const resumePath=val(me.seeker_profiles).resume_path as string | undefined;
  const resumePanel=me.role==='jobseeker'?<section className="form-panel resume-panel"><div className="form-panel-title"><h3>Resume / CV</h3><span className="pill pill-quiet">PRIVATE</span></div><p className="form-hint">Preview or replace your PDF resume here. Previously submitted job applications keep the resume originally attached to them.</p>{resumePath&&<div className="resume-existing"><CircleCheck size={17}/> Resume on file <PrivateFileViewer url={`/api/files/resume?path=${encodeURIComponent(resumePath)}`} label="Quick view resume"/><button type="button" className="doc-delete" onClick={()=>setDeleteResume(true)} aria-label="Delete current resume" title="Request LGU approval for resume removal"><span>Request removal</span></button></div>}<label className="upload-zone upload-zone-small"><UploadCloud size={25}/><strong>{resume?resume.name:'Choose a PDF resume'}</strong><span>{resumePath?'Select a new file to replace your current resume':'PDF only, maximum 5 MB'}</span><input type="file" disabled={busy} accept="application/pdf,.pdf" onChange={e=>{const file=e.target.files?.[0];if(file)setResume(file);e.target.value='';}}/></label><LocalFilePreview file={resume} label="Preview selected resume"/><button type="button" className="btn btn-outline" disabled={busy||!resume} onClick={sendResume}>{busy?(uploadProgress||'Working…'):resumePath?'Replace resume':'Save resume'} <ArrowUpRight size={16}/></button>{resumeRequests[0]?.status==='pending'&&<p className="form-hint">Resume removal is awaiting LGU approval.</p>}{deleteResume&&<div className="modal-backdrop"><div className="form-modal" role="dialog" aria-modal="true" aria-label="Request resume removal"><h2>Request resume removal</h2><p>LGU must approve removing your resume. Existing application attachments will remain unchanged. If approved, upload a new resume and complete verification again.</p><label className="form-field"><span>Reason for removal</span><textarea value={resumeReason} rows={3} onChange={e=>setResumeReason(e.target.value)} placeholder="Explain why this resume should be removed"/></label><div className="dialog-actions"><button type="button" className="btn btn-outline" onClick={()=>setDeleteResume(false)}>Cancel</button><button type="button" className="btn btn-ink" disabled={busy||resumeReason.trim().length<8} onClick={async()=>{try{setBusy(true);await request('resume/removal-request','POST',{reason:resumeReason});setResumeRequests(await request<any[]>('resume/removal-request'));toast.show('Request sent for LGU review.','success');setDeleteResume(false);setResumeReason('');}catch(err){toast.show(err instanceof Error?err.message:'Request failed.','error');}finally{setBusy(false);setUploadProgress('');}}}>Submit request</button></div></div></div>}</section>:null;
+ const openRelatedPage=async(event:React.MouseEvent<HTMLAnchorElement>,notification:{id:string;link:string;read_at?:string|null})=>{
+   // Keep native new-tab gestures. Normal clicks (including keyboard activation)
+   // persist the read state before changing the workspace panel.
+   if(event.defaultPrevented||event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+   event.preventDefault();
+   if(openingNotification.current)return;
+   openingNotification.current=true;
+   try{
+     const destination=new URL(notification.link,window.location.origin);
+     if(destination.origin!==window.location.origin||!['http:','https:'].includes(destination.protocol))throw new Error('This notification link is not available.');
+     if(!notification.read_at){
+       await request('notifications','PATCH',{id:notification.id});
+       const readAt=new Date().toISOString();
+       setData(prev=>prev.map(item=>item.id===notification.id?{...item,read_at:readAt}:item));
+       bump();
+     }
+     router.push(destination.pathname+destination.search+destination.hash);
+   }catch(error){
+     toast.show(error instanceof Error?error.message:'Unable to open notification. Please try again.','error');
+   }finally{openingNotification.current=false;}
+ };
  const documentLibrary=['jobseeker','employer'].includes(me.role)?<VerificationDocuments records={data} onChanged={reloadDocuments} showUploadLink={tab==='profile'}/>:null;
- if(tab==='notifications')return <div className="panel-stack"><div className="section-topline jl-section-meta-only"><button className="btn btn-outline btn-small" onClick={async()=>{try{await request('notifications','PATCH',{all:true});toast.show('All caught up.','success');bump();}catch(e){toast.show('Unable to mark notifications.','error');}}}><Check size={16}/> Mark all read</button></div>{loading?<div className="loading-panel">Checking your notifications…</div>:!data.length?<div className="empty-state"><div className="empty-icon"><BellOff size={38}/></div><h3>No notifications</h3><p>Account updates will appear here.</p></div>:<div className="notification-list">{data.map(n=><div className={`notification-item ${n.read_at?'':'unread'}`} key={n.id}><div className="notification-kind"><Bell size={21}/></div><div><span className="item-overline">{n.kind.toUpperCase()} / {new Date(n.created_at).toLocaleString('en-PH',{timeZone:'Asia/Manila'})}</span><h3>{n.title}</h3><p>{n.body}</p>{n.link&&<a href={n.link} className="text-action">See related page <ArrowUpRight size={15}/></a>}</div>{!n.read_at&&<button className="notification-read" title="Mark as read" onClick={async()=>{try{await request('notifications','PATCH',{id:n.id});setData(prev=>prev.map(x=>x.id===n.id?{...x,read_at:new Date().toISOString()}:x));bump();}catch{toast.show('Unable to mark read.','error');}}}><CircleCheck size={20}/></button>}</div>)}</div>}</div>;
+ if(tab==='notifications')return <div className="panel-stack"><div className="section-topline jl-section-meta-only"><button className="btn btn-outline btn-small" onClick={async()=>{try{await request('notifications','PATCH',{all:true});toast.show('All caught up.','success');bump();}catch(e){toast.show('Unable to mark notifications.','error');}}}><Check size={16}/> Mark all read</button></div>{loading?<div className="loading-panel">Checking your notifications…</div>:!data.length?<div className="empty-state"><div className="empty-icon"><BellOff size={38}/></div><h3>No notifications</h3><p>Account updates will appear here.</p></div>:<div className="notification-list">{data.map(n=><div className={`notification-item ${n.read_at?'':'unread'}`} key={n.id}><div className="notification-kind"><Bell size={21}/></div><div><span className="item-overline">{n.kind.toUpperCase()} / {new Date(n.created_at).toLocaleString('en-PH',{timeZone:'Asia/Manila'})}</span><h3>{n.title}</h3><p>{n.body}</p>{n.link&&<a href={n.link} className="text-action" onClick={event=>void openRelatedPage(event,n)}>See related page <ArrowUpRight size={15}/></a>}</div>{!n.read_at&&<button className="notification-read" title="Mark as read" onClick={async()=>{try{await request('notifications','PATCH',{id:n.id});setData(prev=>prev.map(x=>x.id===n.id?{...x,read_at:new Date().toISOString()}:x));bump();}catch{toast.show('Unable to mark read.','error');}}}><CircleCheck size={20}/></button>}</div>)}</div>}</div>;
  if(tab==='verification'){
    const latest=data[0];
    const pending=latest?.status==='pending';
