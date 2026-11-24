@@ -4,7 +4,8 @@ import { adminClient } from '@/lib/supabase/admin';
 import { userClient } from '@/lib/supabase/server';
 import { ApiError, currentUser, requireSameOrigin, checkLimit, readJson, dbError, recordAudit, notify, ok } from '@/lib/guards';
 import { sendSystemEmail, emailPerson, applicationDecisionNotice, employmentStatusNotice } from '@/lib/mail';
-import { uploadPrivate } from '@/lib/uploads';
+import { uploadPrivate, avatarMime } from '@/lib/uploads';
+import { prepareUpload,readStaged,cleanupStaged } from '@/lib/staged-uploads';
 import { matchJobSkills, normalizeSkills } from '@/lib/skillMatching';
 import { signUpSchema, jobSchema, applicationSchema, decisionSchema, validated } from '@/lib/validators';
 import { reportData, csvReport, pdfReport } from '@/lib/report';
@@ -30,8 +31,28 @@ export async function api(req:NextRequest,parts:string[]) {
  const method=req.method;
  const url=req.nextUrl;
  const q=(s:string)=>url.searchParams.get(s);
+ // Same-origin POSTs are checked below; avoid stale configured deployment URLs.
+ const confirmationUrl=(recovery=false)=>{
+   const target=new URL('/auth/confirm',req.nextUrl.origin);
+   if(recovery)target.searchParams.set('next','/auth/reset');
+   return target.toString();
+ };
  if(!['GET','POST','PATCH','DELETE'].includes(method)) fail('Method not allowed.',405);
  if(method!=='GET') requireSameOrigin(req);
+
+ if((routeIs(parts,'uploads','prepare')||routeIs(parts,'uploads','cleanup'))&&method==='POST') {
+   const {user,profile}=await currentUser(['jobseeker','employer']);
+   const body=await readJson(req);
+   const purpose=body?.purpose;
+   if(purpose!=='verification'&&purpose!=='resume')fail('Invalid upload purpose.');
+   if(purpose==='resume'&&profile.role!=='jobseeker')fail('Not authorized.',403);
+   if(parts[1]==='prepare'){
+     await checkLimit(req,'document_upload:'+user.id,30,900);
+     return ok(await prepareUpload(user.id,purpose,body.size,body.mime));
+   }
+   if(!Array.isArray(body.paths)||body.paths.length>3)fail('Invalid upload references.');
+   await cleanupStaged(user.id,purpose,body.paths);return ok({message:'Temporary uploads cleared.'});
+ }
 
  if(routeIs(parts,'health')&&method==='GET') {
    const {error}=await db().from('categories').select('id').limit(1);
@@ -43,9 +64,8 @@ export async function api(req:NextRequest,parts:string[]) {
    await checkLimit(req,'signup',6,3600);
    const data=parse(signUpSchema,await readJson(req));
    const client=await userClient();
-   const site=process.env.NEXT_PUBLIC_SITE_URL||url.origin;
    const {data:auth,error}=await client.auth.signUp({email:data.email.toLowerCase(),password:data.password,
-     options:{emailRedirectTo:`${site}/auth/confirm`,data:{...data,password:undefined,email:undefined}}});
+     options:{emailRedirectTo:confirmationUrl(),data:{...data,password:undefined,email:undefined}}});
    if(error) fail(error.message,400);
    return ok({message:'Check your inbox for the confirmation link.',requires_confirmation:!auth.session},201);
  }
@@ -97,7 +117,8 @@ export async function api(req:NextRequest,parts:string[]) {
    const body=await readJson(req);
    if(!z.email().safeParse(body.email).success) fail('Enter a valid email address.');
    const client=await userClient();
-   await client.auth.resetPasswordForEmail(body.email,{redirectTo:`${process.env.NEXT_PUBLIC_SITE_URL||url.origin}/auth/confirm?next=/auth/reset`});
+   const {error}=await client.auth.resetPasswordForEmail(body.email,{redirectTo:confirmationUrl(true)});
+   if(error){console.error('[Recovery email]',error.code,error.status);if(error.status===429)fail('Too many recovery requests. Try again later.',429);fail('Recovery email could not be sent. Please try again.',503);}
    return ok({message:'If the address exists, you will receive password recovery instructions.'});
  }
 
@@ -116,7 +137,7 @@ export async function api(req:NextRequest,parts:string[]) {
    const body=await readJson(req);
    if(!z.email().safeParse(body.email).success) fail('Enter a valid email address.');
    const client=await userClient();
-   const {error}=await client.auth.resend({type:'signup',email:body.email,options:{emailRedirectTo:`${process.env.NEXT_PUBLIC_SITE_URL||url.origin}/auth/confirm`}});
+   const {error}=await client.auth.resend({type:'signup',email:body.email,options:{emailRedirectTo:confirmationUrl()}});
    if(error){
      if(error.status===429||/rate limit|too many/i.test(error.message)) fail('Too many verification email requests. Please try again later.',429);
      fail('Verification email is temporarily unavailable. Please try again later.',503);
@@ -143,11 +164,12 @@ export async function api(req:NextRequest,parts:string[]) {
      if(key==='address_line' && val.length>180) fail('The address is too long.');
      patch[key]=val;
    }
+   if(profile.role==='jobseeker'&&body.experience_years!==undefined){const years=typeof body.experience_years==='string'&&body.experience_years.trim()!==''?Number(body.experience_years):body.experience_years;if(typeof years!=='number'||!Number.isInteger(years)||years<0||years>65)fail('Enter years of experience between 0 and 65.');}
    if(Object.keys(patch).length) { const {error}=await db().from('profiles').update(patch).eq('id',user.id); dbError(error); }
    if(profile.role==='jobseeker'){
      const extras:Record<string,unknown>={};
      for(const key of ['education','desired_role','preferred_work_setup','portfolio_url','linkedin_url']) if(typeof body[key]==='string') extras[key]=take(body[key].trim(),255);
-     if(typeof body.experience_years==='number' && body.experience_years>=0 && body.experience_years<=65) extras.experience_years=Math.floor(body.experience_years);
+     if(body.experience_years!==undefined){const years=typeof body.experience_years==='string'&&body.experience_years.trim()!==''?Number(body.experience_years):body.experience_years;if(typeof years!=='number'||!Number.isInteger(years)||years<0||years>65)fail('Enter years of experience between 0 and 65.');extras.experience_years=years;}
      if(Array.isArray(body.skills)) extras.skills=body.skills.filter((s:unknown)=>typeof s==='string').slice(0,25).map((s:string)=>take(s.trim(),40));
      if(Object.keys(extras).length){const {error}=await db().from('seeker_profiles').update(extras).eq('user_id',user.id);dbError(error);}
    }
@@ -173,10 +195,9 @@ export async function api(req:NextRequest,parts:string[]) {
    if(Number(req.headers.get('content-length')||0)>3*1024*1024) fail('Photo must be smaller than 2 MB.',413);
    const form=await req.formData();const file=form.get('avatar');
    if(!(file instanceof File)||file.size>2*1024*1024) fail('Choose a PNG or JPG photo below 2 MB.');
-   // validateFile checks the actual file signature, not only the supplied extension.
+   const {data:previous,error:previousError}=await db().from('profiles').select('avatar_url').eq('id',user.id).single();
+   dbError(previousError,'Unable to read your profile photo. Contact support.');
    const item=await uploadPrivate('avatars',user.id,file);
-   if(!item.mime.startsWith('image/')){await db().storage.from('avatars').remove([item.path]);fail('Only PNG and JPG profile photos are allowed.');}
-   const {data:previous}=await db().from('profiles').select('avatar_url').eq('id',user.id).single();
    const {error}=await db().from('profiles').update({avatar_url:item.path}).eq('id',user.id);
    if(error){await db().storage.from('avatars').remove([item.path]);dbError(error);}
    if(previous?.avatar_url&&previous.avatar_url.startsWith(`${user.id}/`))await db().storage.from('avatars').remove([previous.avatar_url]);
@@ -185,7 +206,8 @@ export async function api(req:NextRequest,parts:string[]) {
  }
  if(routeIs(parts,'avatar')&&method==='DELETE') {
    const {user}=await currentUser();
-   const {data:previous}=await db().from('profiles').select('avatar_url').eq('id',user.id).single();
+   const {data:previous,error:previousError}=await db().from('profiles').select('avatar_url').eq('id',user.id).single();
+   dbError(previousError,'Unable to read your profile photo.');
    const {error}=await db().from('profiles').update({avatar_url:null}).eq('id',user.id);dbError(error);
    if(previous?.avatar_url?.startsWith(`${user.id}/`))await db().storage.from('avatars').remove([previous.avatar_url]);
    await recordAudit(user.id,'profile.avatar_removed');
@@ -208,8 +230,11 @@ export async function api(req:NextRequest,parts:string[]) {
    const {data:person,error:personError}=await db().from('profiles').select('avatar_url').eq('id',ownerId).maybeSingle();dbError(personError);
    if(!person?.avatar_url||!person.avatar_url.startsWith(`${ownerId}/`))fail('Photo unavailable.',404);
    const {data:file,error}=await db().storage.from('avatars').download(person.avatar_url);
-   if(error||!file||!['image/jpeg','image/png'].includes(file.type))fail('Photo unavailable.',404);
-   return new NextResponse(await file.arrayBuffer(),{headers:{'Content-Type':file.type,'Cache-Control':'private, max-age=60','X-Content-Type-Options':'nosniff'}});
+   if(error||!file)fail('Photo unavailable.',404);
+   const bytes=await file.arrayBuffer();
+   const mime=avatarMime(new Uint8Array(bytes));
+   if(!mime)fail('Photo unavailable.',404);
+   return new NextResponse(bytes,{headers:{'Content-Type':mime,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
  }
 
  if(routeIs(parts,'businesses')&&method==='GET') {
@@ -285,34 +310,29 @@ export async function api(req:NextRequest,parts:string[]) {
  if(routeIs(parts,'verification')&&method==='POST') {
    const {user,profile}=await currentUser(['jobseeker','employer']);
    if(profile.lgu_status==='approved' && q('replace')!=='approved') fail('To replace approved evidence, start a new LGU review request.',409);
-   const {data:existing}=await db().from('verification_submissions').select('id').eq('user_id',user.id).eq('status','pending').limit(1);
+   const {data:existing,error:existingError}=await db().from('verification_submissions').select('id').eq('user_id',user.id).eq('status','pending').limit(1);
+   dbError(existingError,'Unable to check existing verification requests.');
    if(existing?.length) fail('Your previous documents are already awaiting review.',409);
-   if(Number(req.headers.get('content-length')||0)>18*1024*1024)fail('Upload size exceeds the allowed limit.',413);
-   const form=await req.formData();
-   const supporting=form.getAll('documents').filter((file):file is File=>file instanceof File);
-   const permit=form.get('business_permit');
-   if(profile.role==='employer' && !(permit instanceof File)) fail('Upload your business permit for LGU verification.');
-   const files=profile.role==='employer'?[(permit as File),...supporting]:supporting;
-   if(files.length<1||files.length>3) fail('Provide one to three verification documents.');
-   let selectedTypes:string[]=[];
-   try {
-     const raw=form.get('document_types');
-     if(typeof raw==='string') {
-       const parsed=JSON.parse(raw);
-       if(!Array.isArray(parsed) || parsed.length!==supporting.length || parsed.some(item=>typeof item!=='string')) fail('Select a document type for every supporting file.');
-       selectedTypes=parsed;
-     }
-   } catch(error) {if(error instanceof ApiError)throw error;fail('Invalid document classifications.');}
+   const body=await readJson(req);
+   const refs=body?.documents;
+   const selectedTypes=body?.document_types;
+   if(!Array.isArray(refs)||refs.length>(profile.role==='employer'?2:3)||!Array.isArray(selectedTypes)||selectedTypes.length!==refs.length||selectedTypes.some((item:unknown)=>typeof item!=='string'))fail('Select a document type for every supporting file.');
+   if(profile.role==='employer'&&!body.business_permit)fail('Upload your business permit for LGU verification.');
+   if(profile.role==='jobseeker'&&!refs.length)fail('Provide at least one identity document.');
+   const allRefs=profile.role==='employer'?[body.business_permit,...refs]:refs;
+   if(new Set(allRefs.map((ref:any)=>ref?.path)).size!==allRefs.length)fail('Select distinct documents.');
+   const files:File[]=[];
+   for(const ref of allRefs)files.push(await readStaged(user.id,'verification',ref));
    const allowedTypes=new Set(['government_id','birth_certificate','resume','certificate','supporting','business_registration','representative_id']);
-   if(selectedTypes.some(type=>!allowedTypes.has(type))) fail('Select a valid document type.');
-   const supportingTypes=selectedTypes.length?selectedTypes:supporting.map((_,index)=>profile.role==='jobseeker'&&index===0?'government_id':'supporting');
+   if(selectedTypes.some((type:string)=>!allowedTypes.has(type))) fail('Select a valid document type.');
+   const supportingTypes=selectedTypes as string[];
    if(profile.role==='jobseeker'&&!supportingTypes.some(type=>['government_id','birth_certificate'].includes(type)))fail('Include a government ID or birth certificate for identity verification.');
    if(profile.role==='jobseeker'){
      const {data:resumeProfile,error:resumeError}=await db().from('seeker_profiles').select('resume_path').eq('user_id',user.id).maybeSingle();
      dbError(resumeError,'Unable to confirm your resume.');
      if(!resumeProfile?.resume_path) fail('Upload your resume through the Resume section before LGU verification.');
    }
-   const statement=take(str(form.get('statement')),1200);
+   const statement=take(str(body.statement),1200);
    const {data:sub,error:subError}=await db().from('verification_submissions').insert({user_id:user.id,kind:profile.role,statement}).select('id').single();
    dbError(subError,'Could not open a verification request.');
    const uploaded:string[]=[];
@@ -353,18 +373,16 @@ export async function api(req:NextRequest,parts:string[]) {
 
  if(routeIs(parts,'resume')&&method==='POST') {
    const {user}=await currentUser(['jobseeker']);
-   if(Number(req.headers.get('content-length')||0)>6*1024*1024)fail('Resume exceeds the upload limit.',413);
-   const form=await req.formData();
-   const file=form.get('resume');
-   if(!(file instanceof File)) fail('Select your resume PDF.');
+   const body=await readJson(req);
+   const file=await readStaged(user.id,'resume',body?.resume);
+   const {data:old,error:oldError}=await db().from('seeker_profiles').select('resume_path').eq('user_id',user.id).single();
+   dbError(oldError,'Unable to load your current resume.');
+   if(!old)fail('Your career profile is unavailable.',409);
    const item=await uploadPrivate('resumes',user.id,file,true);
-   const {data:old}=await db().from('seeker_profiles').select('resume_path').eq('user_id',user.id).single();
-   const {error}=await db().from('seeker_profiles').update({resume_path:item.path}).eq('user_id',user.id);
-   if(error){await db().storage.from('resumes').remove([item.path]);dbError(error);}
-   if(old?.resume_path){
-     const {count}=await db().from('applications').select('id',{count:'exact',head:true}).eq('resume_path',old.resume_path);
-     if(!count) await db().storage.from('resumes').remove([old.resume_path]);
-   }
+   const {data:updated,error}=await db().from('seeker_profiles').update({resume_path:item.path}).eq('user_id',user.id).select('user_id').maybeSingle();
+   if(error||!updated){await db().storage.from('resumes').remove([item.path]);dbError(error);fail('Could not save your resume.',409);}
+
+   // Preserve prior files: applications and pending removal requests may still reference them.
    return ok({path:item.path,message:'Resume uploaded securely.'});
  }
 
@@ -379,7 +397,8 @@ export async function api(req:NextRequest,parts:string[]) {
    if(!current?.resume_path)fail('There is no resume to remove.');
    const body=await readJson(req);const reason=take(str(body.reason),800);
    if(reason.length<8)fail('Provide a short reason for LGU review.');
-   const {data:pending}=await db().from('resume_removal_requests').select('id').eq('seeker_id',user.id).eq('status','pending').limit(1);
+   const {data:pending,error:pendingError}=await db().from('resume_removal_requests').select('id').eq('seeker_id',user.id).eq('status','pending').limit(1);
+   dbError(pendingError,'Unable to check pending resume removal requests.');
    if(pending?.length)fail('Your resume-removal request is already awaiting LGU review.',409);
    const {error}=await db().from('resume_removal_requests').insert({seeker_id:user.id,resume_path:current.resume_path,reason});dbError(error,'Unable to submit the request.');
    await recordAudit(user.id,'resume.removal_requested');
@@ -388,7 +407,7 @@ export async function api(req:NextRequest,parts:string[]) {
  if(routeIs(parts,'resume','removal-request')&&method==='GET') {
    const {user}=await currentUser(['jobseeker']);
    const {data,error}=await db().from('resume_removal_requests').select('id,status,created_at,reviewed_at,decision_note').eq('seeker_id',user.id).order('created_at',{ascending:false}).limit(5);
-   dbError(error);return ok(data||[]);
+   dbError(error,'Unable to load your resume removal requests.');return ok(data||[]);
  }
  if(parts[0]==='files'&&parts[1]==='document'&&parts[2]&&method==='GET') {
    const {user,profile}=await currentUser();
@@ -396,6 +415,7 @@ export async function api(req:NextRequest,parts:string[]) {
    dbError(error);
    if(!doc) fail('File unavailable.',404);
    if(doc.owner_id!==user.id && !(profile.role==='lgu_admin' && profile.lgu_status==='approved')) fail('Not authorized.',403);
+   if(q('ticket')==='1'){const {data,error}=await db().storage.from('verification-documents').createSignedUrl(doc.path,60);if(error||!data)fail('Document could not be downloaded.',404);return ok({url:data.signedUrl});}
    const {data,error:storageError}=await db().storage.from('verification-documents').download(doc.path);
    if(storageError||!data) fail('Document could not be downloaded.',404);
    return new NextResponse(await data.arrayBuffer(),{headers:{'Content-Type':doc.media_type,'Content-Disposition':`${q('download')==='1'?'attachment':'inline'}; filename="document-${doc.id}.${doc.media_type==='application/pdf'?'pdf':doc.media_type==='image/png'?'png':'jpg'}"`,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
@@ -434,6 +454,7 @@ export async function api(req:NextRequest,parts:string[]) {
      if(!allowed) fail('Not authorized.',403);
      path=requestedPath;
    }
+   if(q('ticket')==='1'){const {data,error}=await db().storage.from('resumes').createSignedUrl(path,60);if(error||!data)fail('The attached resume is unavailable.',404);return ok({url:data.signedUrl});}
    const {data,error}=await db().storage.from('resumes').download(path);
    if(error||!data) fail('The attached resume is unavailable. Ask the candidate to check their uploaded file.',404);
    return new NextResponse(await data.arrayBuffer(),{headers:{'Content-Type':'application/pdf','Content-Disposition':'inline; filename="resume.pdf"','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
@@ -608,8 +629,19 @@ export async function api(req:NextRequest,parts:string[]) {
  }
  if(routeIs(parts,'lgu','resume-removals')&&method==='GET') {
    await currentUser(['lgu_admin'],true);
-   const {data,error}=await db().from('resume_removal_requests').select('id,seeker_id,resume_path,reason,status,created_at,reviewed_at,decision_note,profiles!resume_removal_requests_seeker_id_fkey(full_name,email,barangay)').eq('status','pending').order('created_at',{ascending:true}).limit(150);
-   dbError(error);return ok(data||[]);
+   const {data,error}=await db().from('resume_removal_requests').select('id,seeker_id,reason,status,created_at,reviewed_at,decision_note').eq('status','pending').order('created_at',{ascending:true}).limit(150);
+   if(error&&['42P01','PGRST205'].includes(error.code||'')){
+     console.error('[LGU resume removal schema]',error.code);
+     fail('Resume removal requests are not configured in the database. Contact the system administrator.',503);
+   }
+   dbError(error,'Unable to load resume removal requests.');
+   const rows=data||[];
+   const ids=[...new Set(rows.map(row=>row.seeker_id))];
+   if(!ids.length)return ok([]);
+   const {data:people,error:peopleError}=await db().from('profiles').select('id,full_name,barangay').in('id',ids);
+   dbError(peopleError,'Unable to load jobseeker details for resume requests.');
+   const byId=new Map((people||[]).map(person=>[person.id,person] as const));
+   return ok(rows.map(row=>({...row,profiles:byId.get(row.seeker_id)||null})));
  }
  if(routeIs(parts,'lgu','resume-removals')&&method==='POST') {
    const {user}=await currentUser(['lgu_admin'],true);const body=await readJson(req);

@@ -10,6 +10,7 @@ export async function GET(request:NextRequest) {
   const tokenHash=url.searchParams.get('token_hash');
   const type=url.searchParams.get('type') as EmailOtpType|null;
   const next=url.searchParams.get('next');
+  const recovery=type==='recovery'||next==='/auth/reset';
   const auth=await userClient();
   let error:null|Error=null;
   if(code){
@@ -21,6 +22,6 @@ export async function GET(request:NextRequest) {
   } else {
     error=new Error('Confirmation link is incomplete.');
   }
-  if(error)return NextResponse.redirect(new URL(type==='recovery'?'/forgot?error=expired':'/login?error=confirmation',url.origin));
-  return NextResponse.redirect(new URL(next==='/auth/reset'?'/auth/reset':'/app',url.origin));
+  if(error)return NextResponse.redirect(new URL(recovery?'/forgot?error=expired':'/login?error=confirmation',url.origin));
+  return NextResponse.redirect(new URL(recovery?'/auth/reset':'/app',url.origin));
 }

@@ -17,6 +17,7 @@ export function RecoveryForm({update=false,invalidLink=false}:{update?:boolean;i
  const toast=useToast();
  const submit=async(event:React.FormEvent)=>{
   event.preventDefault();
+  if(busy)return;
   if(update){
    if(password.length<8||!/[A-Z]/.test(password)||!/[a-z]/.test(password)||!/[0-9]/.test(password)){toast.show('Use at least 8 characters with upper- and lowercase letters and a number.','warning');return;}
    if(password!==confirmPassword){toast.show('Passwords do not match.','warning');return;}

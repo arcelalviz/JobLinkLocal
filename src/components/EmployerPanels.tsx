@@ -49,6 +49,7 @@ export function EmployerPanels({tab,me,refresh,bump}:{tab:string;me:Profile;refr
  const editPost=(job:Job)=>{setEditing(job.id);setForm(Object.fromEntries(Object.keys(newJob).map(k=>[k,(job as any)[k]==null?'':String((job as any)[k])])) as typeof newJob);setFormOpen(true);};
  const submitJob=async(e:React.FormEvent)=>{
   e.preventDefault();
+  if(busy)return;
   if(!form.title.trim()||form.description.trim().length<16||form.requirements.trim().length<12||!form.barangay.trim()||form.address_line.trim().length<3){toast.show('Complete the job title, description, requirements and location.','warning','Description needs 16 characters, requirements 12.');return;}
   setBusy(true);
   try{

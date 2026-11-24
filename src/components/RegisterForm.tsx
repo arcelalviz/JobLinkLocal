@@ -30,7 +30,7 @@ export function RegisterForm({initialRole='jobseeker'}:{initialRole?:Role}){
    setStep(2);
  };
  const submit=async(event:React.FormEvent)=>{
-  event.preventDefault();
+  event.preventDefault();if(busy)return;
   if(role==='employer'&&!form.business_name.trim()){toast.show('Enter your registered business name.','warning');return;}
   setBusy(true);
   try{

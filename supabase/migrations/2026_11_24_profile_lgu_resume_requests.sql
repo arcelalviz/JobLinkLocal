@@ -1,4 +1,5 @@
 -- ADDITIVE migration. Apply after earlier schema/migrations. Does not delete accounts or jobs.
+alter table public.profiles add column if not exists avatar_url text;
 create table if not exists public.resume_removal_requests (
  id uuid primary key default gen_random_uuid(),
  seeker_id uuid not null references public.profiles(id) on delete cascade,
@@ -18,7 +19,7 @@ grant select,insert,update,delete on public.resume_removal_requests to service_r
 insert into storage.buckets(id,name,public,file_size_limit,allowed_mime_types)
  values('avatars','avatars',false,2097152,array['image/png','image/jpeg'])
  on conflict(id) do update set public=false,file_size_limit=excluded.file_size_limit,allowed_mime_types=excluded.allowed_mime_types;
--- Existing profiles.avatar_url and profiles.suspended_from columns are reused.
+-- Existing profile records and private storage objects are retained.
 
 -- Atomic LGU review for resume-removal requests. Service-role-only execution.
 create or replace function public.review_resume_removal(p_actor uuid,p_request uuid,p_decision text,p_note text)

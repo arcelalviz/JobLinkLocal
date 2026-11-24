@@ -1,0 +1,28 @@
+const fs=require('fs'),path=require('path'),ts=require('typescript'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'..');
+function load(name,imports={}){const src=fs.readFileSync(path.join(root,'src/lib',name+'.ts'),'utf8');const js=ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const mod={exports:{}};new Function('require','module','exports',js)(name=>name in imports?imports[name]:require(name),mod,mod.exports);return mod.exports;}
+const rules=load('upload-rules');const max=rules.MAX_DOCUMENT_BYTES;
+const pdf=new File([Buffer.concat([Buffer.from('%PDF-1.7\n'),Buffer.alloc(max-9)])],'resume.pdf',{type:'application/pdf'});
+const photo=new File([Buffer.from([137,80,78,71,13,10,26,10,1,2])],'id.png',{type:'image/png'});
+class ApiError extends Error{constructor(status,message){super(message);this.status=status;}}
+const calls=[];const files=new Map();let failUpload=false;
+const storage={from:bucket=>({createSignedUploadUrl:async path=>({data:{token:'signed',path},error:null}),uploadToSignedUrl:async(path,token,file)=>{calls.push(['upload',path,file.size]);if(failUpload)return {error:{message:'simulated failure'}};files.set(path,file);return {error:null};},download:async path=>files.has(path)?{data:files.get(path),error:null}:{data:null,error:{message:'missing'}},remove:async paths=>{paths.forEach(p=>files.delete(p));return {error:null};},upload:async(path,bytes)=>{calls.push(['final',bucket,path,bytes.length]);return {error:null};}})};
+const guards={ApiError,dbError:(e,msg)=>{if(e)throw new Error(msg);}};const admin={adminClient:()=>({storage})};
+const uploads=load('uploads',{'./guards':guards,'./supabase/admin':admin,'./upload-rules':rules});
+const staging=load('staged-uploads',{'./guards':guards,'./supabase/admin':admin,'./upload-rules':rules,'./uploads':uploads});
+const owner='11111111-1111-4111-8111-111111111111',other='22222222-2222-4222-8222-222222222222';
+const client=load('document-upload',{'@supabase/ssr':{createBrowserClient:()=>({storage})},'./upload-rules':rules,'./http':{request:async(route,method,body)=>{calls.push(['request',route]);if(route==='uploads/prepare')return staging.prepareUpload(owner,body.purpose,body.size,body.mime);if(route==='uploads/cleanup')return staging.cleanupStaged(owner,body.purpose,body.paths);throw new Error('unexpected request');}}});
+process.env.NEXT_PUBLIC_SUPABASE_URL='https://example.invalid';process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY='mock';
+let count=0;async function test(name,cb){try{await cb();console.log('PASS '+name);count++;}catch(e){console.error('FAIL '+name,e);process.exitCode=1;}}
+(async()=>{
+ await test('Exact 5 MiB accepted, oversized and empty rejected',()=>{assert.equal(pdf.size,max);assert.equal(rules.uploadFileError(max,'application/pdf','resume'),null);assert.ok(rules.uploadFileError(max+1,'application/pdf','resume'));assert.ok(rules.uploadFileError(0,'application/pdf','resume'));});
+ await test('Resume refuses PNG; document accepts PNG and JPEG',()=>{assert.ok(rules.uploadFileError(10,'image/png','resume'));assert.equal(rules.uploadFileError(10,'image/png','verification'),null);assert.equal(rules.uploadFileError(10,'image/jpeg','verification'),null);});
+ await test('Server rejects forged PDF and reads valid PDF/PNG signatures',async()=>{await assert.rejects(uploads.validateFile(new File(['not pdf'],'fake.pdf',{type:'application/pdf'}),true));assert.equal((await uploads.validateFile(pdf,true)).mime,'application/pdf');assert.equal((await uploads.validateFile(photo)).mime,'image/png');});
+ await test('Owner and purpose scope reject another account and traversal',async()=>{const ticket=await staging.prepareUpload(owner,'resume',pdf.size,pdf.type);assert.equal(rules.validStagedPath(ticket.path,owner,'resume'),true);assert.equal(rules.validStagedPath(ticket.path,other,'resume'),false);assert.equal(rules.validStagedPath(ticket.path,owner,'verification'),false);assert.equal(rules.validStagedPath(owner+'/resume/../bad.pdf',owner,'resume'),false);await assert.rejects(staging.readStaged(other,'resume',ticket));});
+ await test('5 MiB resume stages, validates, persists and cleans up',async()=>{const r=await client.submitDocuments('resume',[pdf],async refs=>{const file=await staging.readStaged(owner,'resume',refs[0]);return uploads.uploadPrivate('resumes',owner,file,true);});assert.equal(r.bytes,max);assert.equal(files.size,0);});
+ await test('Three 5 MiB verification files transfer separately and finalize',async()=>{const progress=[];const n=await client.submitDocuments('verification',[pdf,pdf,pdf],async refs=>{for(const ref of refs)await staging.readStaged(owner,'verification',ref);return refs.length;},(done,total)=>progress.push([done,total]));assert.equal(n,3);assert.deepEqual(progress,[[1,3],[2,3],[3,3]]);assert.equal(files.size,0);});
+ await test('Upload failure prevents final submission and clears staging',async()=>{failUpload=true;let finalized=false;try{await assert.rejects(client.submitDocuments('resume',[pdf],async()=>{finalized=true;}));assert.equal(finalized,false);assert.equal(files.size,0);}finally{failUpload=false;}});
+ await test('Final submission failure clears staging',async()=>{await assert.rejects(client.submitDocuments('verification',[photo],async()=>{throw new Error('mock metadata failure');}));assert.equal(files.size,0);});
+ await test('Invalid file rejected before storage request',async()=>{const start=calls.length;await assert.rejects(client.submitDocuments('resume',[photo],async()=>{}));assert.equal(calls.length,start);});
+ console.log(`${count}/9 upload tests passed (mocked Storage; not production).`);
+})();

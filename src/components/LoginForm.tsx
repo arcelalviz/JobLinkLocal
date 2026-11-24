@@ -37,6 +37,7 @@ export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker',r
  };
  const submit=async(event:React.FormEvent)=>{
   event.preventDefault();
+  if(busy)return;
   if(!email.trim()||!password){toast.show('Enter your email and password.','warning');return;}
   setBusy(true);
   try{
@@ -70,7 +71,7 @@ export function LoginForm({invalidConfirmation=false,initialPortal='jobseeker',r
   </div>}
   <form noValidate onSubmit={submit} className="form-stack">
    <label className="form-field"><span>Email address</span><input type="email" required autoComplete="email" placeholder="you@example.com" value={email} onChange={event=>setEmail(event.target.value)}/></label>
-   <label className="form-field"><span>Password</span><div className="input-wrap"><input type={visible?'text':'password'} minLength={8} autoComplete="current-password" required placeholder="Enter your password" value={password} onChange={event=>setPassword(event.target.value)}/><button type="button" className="eye-button" onClick={()=>setVisible(!visible)} aria-label={visible?'Hide password':'Show password'}>{visible?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></label>
+   <div className="form-field"><label htmlFor="login-password">Password</label><div className="input-wrap jl-login-password"><input id="login-password" type={visible?'text':'password'} autoComplete="current-password" required placeholder="Enter your password" value={password} onChange={event=>setPassword(event.target.value)}/><button type="button" className="eye-button" onClick={()=>setVisible(value=>!value)} aria-controls="login-password" aria-pressed={visible} aria-label={visible?'Hide password':'Show password'}>{visible?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></div>
    <div className="form-between form-between-end"><Link href="/forgot">Forgot password?</Link></div>
    <button disabled={busy} className="btn btn-ink btn-form" type="submit">{busy?'Signing in…':`Continue as ${portal==='admin'?'administrator':portal}`} <ArrowRight size={19}/></button>
   </form>

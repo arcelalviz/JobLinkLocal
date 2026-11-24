@@ -53,6 +53,7 @@ export function SeekerPanels({tab,me,refresh,bump}:{tab:string;me:Profile;refres
    catch(e){toast.show(e instanceof Error?e.message:'Could not update saved jobs.','error');}
  };
  const submitApplication=async()=>{
+   if(busy)return;
    if(!selectedJob)return;
    setBusy(true);
    try{

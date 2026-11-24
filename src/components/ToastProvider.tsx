@@ -13,7 +13,7 @@ export function ToastProvider({children}:{children:React.ReactNode}) {
  const [items,setItems]=useState<Toast[]>([]);
  const show=useCallback((title:string,tone:Tone='info',description?:string)=>{
    const id=++nextId;
-   setItems(items=>[...items.slice(-3),{id,title,description,tone}]);
+   setItems(items=>[...items.filter(item=>!(item.title===title&&item.tone===tone&&item.description===description)).slice(-3),{id,title,description,tone}]);
    return id;
  },[]);
  const dismiss=useCallback((id:number)=>setItems(items=>items.filter(t=>t.id!==id)),[]);

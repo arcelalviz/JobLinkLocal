@@ -22,7 +22,7 @@ export async function request<T=any>(path:string,method='GET',body?:unknown):Pro
  try { response=await fetchWithSessionRetry('/api/'+path.replace(/^\//,''),options); }
  catch { throw new Error('Connection interrupted. Check your internet connection.'); }
  const result=await response.json().catch(()=>({error:'Unexpected server response.'})) as ApiResponse<T>;
- if(!response.ok) throw new Error(response.status===401?'Your session expired. Sign in again to upload or update files.':result.error||'The request could not be completed.');
+ if(!response.ok) throw new Error(response.status===413?'Request is too large. Select a smaller file or try again using the updated uploader.':response.status===401?'Your session expired. Sign in again to upload or update files.':result.error||'The request could not be completed.');
  return result.data as T;
 }
 

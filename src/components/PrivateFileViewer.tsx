@@ -16,7 +16,7 @@ export function PrivateFileViewer({ url, label = 'View document' }: { url: strin
     setPreview(null);
     setError('');
     setMedia('');
-    fetchWithSessionRetry(url, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal })
+    (url.startsWith('blob:')?fetch(url,{signal:controller.signal}):fetchWithSessionRetry(url+(url.includes('?')?'&':'?')+'ticket=1',{credentials:'same-origin',cache:'no-store',signal:controller.signal}).then(async response=>{if(!response.ok)throw new Error('This file is unavailable or you do not have access.');const result=await response.json();if(typeof result.data?.url!=='string')throw new Error('The file link is unavailable.');return fetch(result.data.url,{credentials:'omit',cache:'no-store',signal:controller.signal});}))
       .then(async response => {
         if (!response.ok) throw new Error('This file is unavailable or you do not have access.');
         const blob = await response.blob();
@@ -35,7 +35,7 @@ export function PrivateFileViewer({ url, label = 'View document' }: { url: strin
     {opened && createPortal(<div className="modal-backdrop file-view-backdrop" onClick={() => setOpened(false)}>
       <div className="file-view-modal" role="dialog" aria-label={label} aria-modal="true" onClick={event => event.stopPropagation()}>
         <div className="file-view-toolbar"><strong>{label}</strong><div>
-          {preview && <><a href={preview} download={media==='application/pdf'?'document.pdf':'document.jpg'} title="Download document" aria-label="Download document"><Download size={18}/></a><a href={preview} target="_blank" rel="noopener noreferrer" aria-label="Open preview in a new tab"><ExternalLink size={18}/></a></>}
+          {preview && <><a href={preview} download={media==='application/pdf'?'document.pdf':media==='image/png'?'document.png':'document.jpg'} title="Download document" aria-label="Download document"><Download size={18}/></a><a href={preview} target="_blank" rel="noopener noreferrer" aria-label="Open preview in a new tab"><ExternalLink size={18}/></a></>}
           <button type="button" onClick={() => setOpened(false)} aria-label="Close preview"><X size={20}/></button>
         </div></div>
         {error ? <p className="file-view-status" role="alert">{error}</p>
